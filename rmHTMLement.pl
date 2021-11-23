@@ -7,8 +7,8 @@ sub getElem{my ($ELEM, $NTH)=@_;	--$NTH;
 
 sub getElePath{
 	my $offset='', $under=$_[1];
-	for (split(/\/|->|>/,$_[0])) {
-		/^(\w++)(?|\[(\d+)\]|,(\d+))?/;
+	for (split(/>/,$_[0])) {
+		/^(\w++)(?:,(\d+))?/;
 		($off,$under)=getElem($1, $2?$2:1, $under);
 		die "$_[0] is not found in $file\n" unless $under;
 		$offset.=$off;
@@ -31,7 +31,7 @@ else {
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
 	print 'Path of the element: ';
-	$paths=<>=~s/^\h*\/?//r=~ s/\/?\s*$//r;
+	$paths=<>;
 	print "\nWhich operation will be done :\n- Remove\n- Get\n(r: remove, else: just get it) ";
 	$O=<>=~s/^\h+//r=~ s/\s+$//r;
 	print 'File name of the result: (hit Enter to standard output) ';
@@ -39,16 +39,17 @@ else {
 	undef local $/;$whole=<R>;close R;
 	open W,">","$fn" or die "Cannot open '$fn'\n" if($fn);
 }
-@path=split(/;/,$paths);
+
+@path=split(/;/,$paths=~ s/\s//gr=~ s/^\/+//r=~ s/\/+$//r=~ s/\/|->/>/gr=~ s/\[(\d+)\]/,$1/gr);
 SWC:
 for ($O){
 	if (/^r/) {
 		@path=sort{length($a)<=>length($b)} @path;		# filter out any path having the exact same head to the shorter
 		my $i=0,$k=$#path, $fpath[$k]=$path[0];
-		MAIN:
+		OUT:
 		for $i (1..$#path) {
 			for $j (0..$i-1) {
-				$path[$i]=~ /^$path[$j]/ and next MAIN;}
+				$path[$i]=~ /^$path[$j]/ and next OUT;}
 			$fpath[--$k]=$path[$i];
 		}
 		for(@fpath){
@@ -62,7 +63,7 @@ for ($O){
 	$res='';
 	for(@path){
 		@e=getElePathWDoc($_);
-		$res.="\n$_:\n$e[1]";}
+		$res.="\n$_:\n$e[1]\n";}
 	if ($fn) { print W $res;}
 	else { print $res;}
 }
