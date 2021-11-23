@@ -23,8 +23,7 @@ sub getElePathWDoc{
 if (@ARGV) {
 	$paths=shift;
 	$O=shift;
-	undef local $/;$whole=<>;
-}
+	undef local $/;$whole=<>;}
 else {
 	print "Element path is form of Xpath e.g:\n\nhtml/body/div/div[2]/div[3]\n\n/ may be replaced with > or -> and [2] with ,2 e.g:\nhtml>body>div>div,2>div,3\n\nIt may be put multiply, delimited by ;\n\n";
 	print "File name to work on: ";
@@ -54,14 +53,18 @@ for ($O){
 		}
 		for(@fpath){
 			@e=getElePathWDoc($_);
-			$res=$whole=~ s/\A(\Q$e[0]\E)\Q$e[1]\E(.*+)\Z/$1$2/sr;
+			$whole=~ s/\A(\Q$e[0]\E)\Q$e[1]\E(.*+)\Z/$1$2/s;
 		}
-		last SWC;}
+		if ($fn) { print W $whole;}
+		else { print $whole;}
+		last SWC;
+	}
 	$res='';
 	for(@path){
 		@e=getElePathWDoc($_);
 		$res.="\n$_:\n$e[1]";}
+	if ($fn) { print W $res;}
+	else { print $res;}
 }
+close W;
 
-if ($fn) { print W $res;close W;}
-else { print $res;}
