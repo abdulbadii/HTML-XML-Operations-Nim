@@ -29,7 +29,7 @@ else {
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
 	print 'Path of the element: ';
-	my $i;for (split(/;/,$trPath)){ #=<>)) {
+	my $i;for (split(/;/,$trPath=<>)) {
 		if (/^\s*[a-z]\w*+(?:\h*[\/>]\h*[a-z]\w*+(?:\[\d+\]|,\d+)?)*\/*\s*$/i){
 			$validP[$i++]=$_=~s/\s//gr=~s/\/$//r;
 		}else{
