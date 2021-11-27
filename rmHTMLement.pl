@@ -2,8 +2,8 @@
 use strict;
 
 my $whole;
-sub getElem{	my $NTH=$_[1];	#=nth-1  $_[0]= searched element tag $_[2]= string under to search
-	 $_[2]=~ /\A(<\w+[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base|!DOCTYPE)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$NTH}(?>(?&at)|(?&node))*?)((?&tnode))/s;
+sub getElem{	# $_[0]= searched element tag $_[1] = nth-1 $_[2]= string under to search
+	 $_[2]=~ /\A(<\w+[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base|!DOCTYPE)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?>(?&at)|(?&node))*?)((?&tnode))/s;
 	return ($1,$6);
 }
 sub getElePath{	my $under="<D>$whole";
@@ -29,25 +29,24 @@ else {
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
 	print 'Path of the element: ';
-	my $i;for (split(/;/,$trPath=<>)) {
+	my $i;for (split(/;/,$trPath)){ #=<>)) {
 		if (/^\s*[a-z]\w*+(?:\h*[\/>]\h*[a-z]\w*+(?:\[\d+\]|,\d+)?)*\/*\s*$/i){
 			$validP[$i++]=$_=~s/\s//gr=~s/\/$//r;
-		}else{	print "'$_' is invalid path form\nEdit it or skip it? (E/Enter: Edit  S: Skip  other: Abort) ";
-			my $y=<>;
+		}else{
+			print "'$_' is invalid path form\nEdit it or skip it? (E/Enter: Edit  S: Skip  else: Abort) ";my $y=<>;
 			if ($y=~/^e?$/i){	print "Edit: ";$validP[$i++]=<>;
 			}elsif ($y=~/^s/i) {	next;}
 			else {	die "Aborted by user\n";}
 		}
 	}
 }
-INI:{
+PREP:{
 {	undef local $/;$whole=<R>;close R;}
 my (@e,@miss,$miss1);	$e[1]=1;
 for(@validP){
 	unless ($e[1]) {
 		print "\nSkip the missing '$miss1'\nto process the next path? (Y/Enter: yes. Else: aborting) ";
-		<>=~s/^\h+//r =~/^y?$/i or die "Aborted by user\n";
-	}
+		<>=~s/^\h+//r =~/^y?$/i or die "Aborted by user\n";}
 	@e=getElePath($_);
 	if ($e[1]) {
 		push(@path,$_);
@@ -60,12 +59,12 @@ if ($e[1]) {
 }else{
 	print "\nCouldn't find ";
 	if (@path){
-		print "the last path\n'$miss1'\nContinue doing on other previous path? (Y/Enter: yes. Else: aborting) ";
+		print "the last path\n'$miss1'\nKeep going for previous path found? (Y/Enter: yes. Else: aborting) ";
 		<>=~s/^\h+//r =~/^y?$/i or die "Aborted by user\n";
 	}else{	die "'$miss1'\nNothing was done";}
 }}
 unless	(@ARGV){
-	print "\nWhich operation will be done :\n- Remove\n- Get\n(R/r: remove. Else: just get it) ";
+	print "\nWhich operation will be done :\n- Remove\n- Get\n(R: remove. Else: just get it) ";
 	$O=<>=~s/^\h+//r=~ s/\s+$//r;
 	print 'File name of the result: (hit Enter to standard output) ';
 	my $of=<>=~s/^\h+//r=~ s/\s+$//r;
@@ -75,14 +74,13 @@ unless	(@ARGV){
 SWC:
 for ($O){
 	if (/^r/i) {
-		my (@ufpath,@fpath,$F);
-		@path=sort{length($a)<=>length($b)} @path;		# filter out path whose head is as the shorter one
-		for(@ufpath=@path){
-			s/\//>/g; s/\[(\d+)\]/,$1/g;}
+		my @upath=@path;
+		for(@upath){	s/\//>/g; s/\[(\d+)\]/,$1/g;}		# filter out path whose head is as the shorter one
+		my @path=sort{length($a)<=>length($b)} @upath;			#first: get paths uniformed & sorted
 		$offE[my $k=$#path]=$offElem[0];
 		OUT:
 		for my $i (1..$#path) {
-			for my $j (0..$i-1) {	$ufpath[$i]=~ /^$ufpath[$j]/ && next OUT;	}
+			for my $j (0..$i-1) {	$path[$i]=~ /^$path[$j]/ && next OUT;	}
 			$offE[--$k]=$offElem[$i];
 		}
 		for(@offE){
