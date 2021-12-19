@@ -4,45 +4,40 @@ use strict;
 sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole element string to search
 	 $_[2]=~ /\A(<(?>[a-z]\w*|!DOCTYPE)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?>(?&at)|(?&node))*?)((?&tnode))/s;
 	@{$_[3]}=[$1,$6];
+	return
 }
 
 sub getEleMul {
 	push (@{$_[2]}, ([$1,$5]))		# Pairs of offsets & tags of one name result is in 3rd arg.
-	while $_[1]=~ /\G(<(?>[a-z]\w*|!DOCTYPE)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node)))/g
+	while $_[1]=~ /\G(<(?>[a-z]\w*|!DOCTYPE)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node)))/g;
+	return
 }
 
-our @r;
-sub getE_Path_Rec { my ($path, $iOffNode, $offset) = @_;
+my @res;
+sub getE_Path_Rec { my ($path, $iOffNode) = @_;
 	$path=~ s#^/([^/]+)(.*)$#$2#;
 	my @OffNode;	my $xpNow=$1;
 	for (@$iOffNode) {
 		$xpNow=~ m#^([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?#;
 		print "\ns1= $1  s2= $2";
 			if($2) {
-				&getElem($1, $2-1, $_->[1], \@OffNode);
+				&getElem($1, $2-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
 				return 1 if !@OffNode;
-				my $off=$offset.${$OffNode[0]}[0];
+				${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 				if ($path) {
-					&getE_Path_Rec( $path, \@OffNode, $off)
+					&getE_Path_Rec( $path, \@OffNode )
 				}else {
-					push( @r, [$off, ${$OffNode[0]}[1]]);
+					push( @res, @OffNode )
 				}
 			}else {
-				&getEleMul($1, $_->[1], \@OffNode);			# return found offset-node pairs to the last arg
-				&getE_Path_Rec( $path, \@OffNode, $offset.${$OffNode[0]}[0])
+				&getEleMul($1, $_->[1], \@OffNode );			# return found offset-node pairs to the last arg
+				&getE_Path_Rec( $path, \@OffNode )
 			}
 		}
 		return
 }
 
-my ($whole, $trPath, @path, @valid, $O, $CP);
-sub getE_Path{
-	local @r;my @i=['',$whole];
-	my $er=&getE_Path_Rec( $_[0], \@i, '');
-	@{$_[1]}=@r;
-	return $er
-}
-
+my ($whole, $trPath, @valid, $O, $CP);
 if (@ARGV) {
 	$trPath=shift;
 	$O=shift;
@@ -80,20 +75,22 @@ if (@ARGV) {
 	undef local $/;$whole=<R>;close R;
 }
 
-
-my (@res, $er, @miss,$miss_)=();
+my ($er, @path, @miss,$miss_);
 for(@valid){
 	if ($er) {
 		print "\nSkip the missing '$miss_'\nto process the next path? (Y/Enter: yes. Else: aborting) ";
 		<>=~/^(?:\h*y)?$/i or die "Aborted by user\n"}
-	if ($er=&getE_Path($_=~s#(^/html|(?<=^/html/)body|(?<=^/html/body/)main)#$1\[1\]#gr, \@res)) {
+	my @i=['',$whole];
+	if ($er=&getE_Path_Rec($_=~s#(^/html|(?<=^/html/)body|(?<=^/html/body/)main)#$1\[1\]#gr, \@i)) {
 		push(@miss,$miss_=$_)
 	}else{
-		die "\n=***=${$res[0]}[0]*===*\n${$res[0]}[1]===\n"}
+		push(@path, [$_, @res])
+		}
 }
+
 if ($er){
 	print "\nCouldn't find ";
-	if (@res){
+	if (@path){
 		print "the last path\n'$miss_'\nKeep working on previous path(s) found? (Y/Enter: yes. Else: aborting) ";
 		<>=~s/^\h+//r =~/^y?$/i or die "Aborted by user\n";
 	}else{	die "'$miss_'\nNothing was done\n"}
@@ -129,8 +126,7 @@ if (/^r/i){
 	fileno W? print W $whole:print $whole;
 	last SWC;
 }
-my $o;
-for (@path){	$o.="\n$_->[0]:\n$_->[2]\n";}
+my $o;for (@path){	$o.="\n$_->[0]:\n${$_->[1]}[1]" }
 fileno W? print W $o:print $o;
 }
 close W;
