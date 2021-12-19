@@ -87,7 +87,6 @@ for(@valid){
 		push(@path, [$_, @res])
 		}
 }
-
 if ($er){
 	print "\nCouldn't find ";
 	if (@path){
@@ -98,7 +97,7 @@ if ($er){
 		for(@miss){	print "Skipping non existant '$_'\n"}
 }
 
-# Removal process, etc are optimized by filtering out path whose head is as the shorter one's
+# Removal, etc are optimized by filtering out path whose head is as the shorter one's
 # First sort the path lengths
 my @fpath=sort{length $a->[0] cmp length $b->[0]} @path;
 O:for(my $i=1;$i<=$#fpath;) {
@@ -116,16 +115,18 @@ unless	(@ARGV){
 	my $of=<>=~s/^\h+//r=~ s/\s+$//r;
 	open W,">","$of" or die "Cannot open '$of'\n" if($of);
 }
-
+# Removal, etc must be processed from the longest elem offset found
+# So first sort the offset lengths descendingly
+my @soffsetP=sort {length ${$b->[1]}[0] <=> ${$a->[1]}[0]} @fpath;
 SWC:
-my @soffsetP=sort {length $b->[1] <=> $a->[1]} @fpath;		# Sort descendingly the length of offsets' elements found
 for ($O){
 if (/^r/i){
 	for(@soffsetP){
-		$whole=~ s/\A(\Q$_->[1]\E)\Q$_->[2]\E\s?(.*)\Z/$1$2/s;}
+		$whole=~ s/\A(\Q${$_->[1]}[0]\E)\Q${$_->[1]}[1]\E(.*)\Z/$1$2/s}
 	fileno W? print W $whole:print $whole;
 	last SWC;
 }
+
 my $o;for (@path){	$o.="\n$_->[0]:\n${$_->[1]}[1]" }
 fileno W? print W $o:print $o;
 }
