@@ -1,40 +1,50 @@
 #!/usr/bin/perl -w
 use strict;
-
-sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole element string to search
-	 $_[2]=~ /\A(<(?>[a-z]\w*|!DOCTYPE)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?>(?&at)|(?&node))*?)((?&tnode))/s;
+# Pairs of offset & same-name elem returned in 4rd arg
+sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole elem to search
+	 $_[2]=~ /\A(<(?>[a-z]\w*|!DOC)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?>(?&at)|(?&node))*?)((?&tnode))/;
 	@{$_[3]}=[$1,$6];
 	return
 }
 
 sub getEleMul {
-	push (@{$_[2]}, ([$1,$5]))		# Pairs of offsets & tags of one name result is in 3rd arg.
-	while $_[1]=~ /\G(<(?>[a-z]\w*|!DOCTYPE)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node)))/g;
+	my $n=$_[0];
+	my $pre='';
+	my ($off,$b)=$_[1]=~ /^(<(?>[a-z]\w*)[^>]*+>)(.*)/s;
+	while ($b=~/\G((?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$n\b[^>]*+>)(?&node))/g) {
+		push (@{$_[3]}, [$_[2].($off.=$1.$pre), $5]);
+		$pre=$5
+	}
 	return
 }
 
 my @res;
 sub getE_Path_Rec { my ($path, $iOffNode) = @_;
-	$path=~ s#^/([^/]+)(.*)$#$2#;
-	my @OffNode;	my $xpNow=$1;
+	$path=~ s#^/([^/]+)(.*)$#$2#;	my $xpNow=$1;
+	my @OffNode;
 	for (@$iOffNode) {
 		$xpNow=~ m#^([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?#;
+		if($2) {
 		print "\ns1= $1  s2= $2";
-			if($2) {
-				&getElem($1, $2-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
-				return 1 if !@OffNode;
-				${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
-				if ($path) {
-					&getE_Path_Rec( $path, \@OffNode )
-				}else {
-					push( @res, @OffNode )
-				}
-			}else {
-				&getEleMul($1, $_->[1], \@OffNode );			# return found offset-node pairs to the last arg
+			&getElem($1, $2-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
+			return 1 if !@OffNode;
+			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
+			if ($path) {
 				&getE_Path_Rec( $path, \@OffNode )
+			}else {
+				push( @res, [@OffNode] )
+			}
+		}else {
+			&getEleMul($1, $_->[1], $_->[0], \@OffNode );
+			return 1 if !@OffNode;
+			if ($path) {
+				&getE_Path_Rec( $path, \@OffNode )
+			}else {
+				push( @res, [@OffNode])
 			}
 		}
-		return
+	}
+	return
 }
 
 my ($whole, $trPath, @valid, $O, $CP);
@@ -49,7 +59,7 @@ if (@ARGV) {
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
 	print 'The element path(s): ';
-	$trPath='/html/body/main/div[1]/div[2]/div[1]'; #*/html/body/main/div,1/div,2/div,1/div,1';
+	$trPath='/html/body/main/div[1]/div[2]/div[1]/div[1]/p';
 	for (split(/;/,$trPath)) {#*
 	#for (split(/;/,$trPath=<>)) {#
 		L:if (m#^\s*/?/?([a-z]\w*+(?:\[(?>\d+|@[a-z]+(?:=\w+)?)\]|,\d+)?|@[a-z]\w*)(?://?(?1))*\s*$#i)	{
@@ -81,11 +91,11 @@ for(@valid){
 		print "\nSkip the missing '$miss_'\nto process the next path? (Y/Enter: yes. Else: aborting) ";
 		<>=~/^(?:\h*y)?$/i or die "Aborted by user\n"}
 	my @i=['',$whole];
-	if ($er=&getE_Path_Rec($_=~s#(^/html|(?<=^/html/)body|(?<=^/html/body/)main)#$1\[1\]#gr, \@i)) {
+	if ($er=&getE_Path_Rec($_=~s#(^/html|(?<=^/html/)body|(?<=^/html/body/)main)/#$1\[1\]/#gr, \@i)) {
 		push(@miss,$miss_=$_)
 	}else{
-		push(@path, [$_, @res])
-		}
+		push(@path, [$_, @res]);
+	}
 }
 if ($er){
 	print "\nCouldn't find ";
@@ -100,11 +110,11 @@ if ($er){
 # Removal, etc are optimized by filtering out path whose head is as the shorter one's
 # First sort the path lengths
 my @fpath=sort{length $a->[0] cmp length $b->[0]} @path;
-O:for(my $i=1;$i<=$#fpath;) {
+P:for(my $i=1;$i<=$#fpath;) {
 	for(my $j=0;$j<=$i-1;) {
 		if ($fpath[$i]=~/^$fpath[$j++]/) {
 			splice(@fpath,$i,1);
-			next O}
+			next P}
 	}
 	$i++
 }
@@ -115,19 +125,21 @@ unless	(@ARGV){
 	my $of=<>=~s/^\h+//r=~ s/\s+$//r;
 	open W,">","$of" or die "Cannot open '$of'\n" if($of);
 }
-# Removal, etc must be processed from the longest elem offset found
-# So first sort the offset lengths descendingly
-my @soffsetP=sort {length ${$b->[1]}[0] <=> ${$a->[1]}[0]} @fpath;
-SWC:
+# Removal, etc must be from the longest elem offset found, first sort offset lengths descendingly
+SW:
 for ($O){
+my @soffsetP=sort {length ${$b->[1]}[0] <=> ${$a->[1]}[0]} @fpath;
 if (/^r/i){
 	for(@soffsetP){
 		$whole=~ s/\A(\Q${$_->[1]}[0]\E)\Q${$_->[1]}[1]\E(.*)\Z/$1$2/s}
 	fileno W? print W $whole:print $whole;
-	last SWC;
+	last SW;
 }
-
-my $o;for (@path){	$o.="\n$_->[0]:\n${$_->[1]}[1]" }
+my $o;
+for (@path) {
+	$o="$_->[0]:";
+	$o.="\n$_->[1]\n" for @{$_->[1]}
+}
 fileno W? print W $o:print $o;
 }
 close W;
