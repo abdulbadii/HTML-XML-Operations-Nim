@@ -2,9 +2,10 @@
 use strict;
 # Pairs of offset & same-name elem returned in 4rd arg
 sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole elem to search
-	 $_[2]=~ /\A(<(?>[a-z]\w*|!DOC)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?>(?&at)|(?&node))*?)((?&tnode))/;
-	@{$_[3]}=[$1,$6];
-	return
+	if ($_[2]=~/^(<(?>[a-z]\w*|!DOC)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?>(?&at)|(?&node))*?)((?&tnode))/) {
+		 @{$_[3]}=[$1,$6];
+		 return}
+	return 1
 }
 
 sub getEleMul {
@@ -13,21 +14,18 @@ sub getEleMul {
 		push (@{$_[3]}, [$_[2].($off.=$pre.$1), $5]);
 		$pre=$5
 	}
-	return
+	return !$pre
 }
 
 my @res;
 sub getE_Path_Rec { my $iOffNode = $_[1];
 	my ($tag,$nth,$path)=$_[0]=~ m#^/([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?(.*)#;
-	print "$tag = $nth =$path=";
 	my @OffNode;
 	for (@$iOffNode) {
-		print $_->[1];exit;
 
+		print "\ns1=$tag  ",$nth?"s2= $nth":'';
 		if($nth) {
-		print "\ns1= $tag  s2= $nth";
-			&getElem($tag, $nth-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
-			return 1 if !@OffNode;
+			return 1 if &getElem($tag, $nth-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 			if ($path) {
 				&getE_Path_Rec( $path, \@OffNode )
@@ -35,13 +33,11 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 				push( @res, [@OffNode] )
 			}
 		}else {
-		print "\ns1=$tag=\n****$_->[1]*=*=*"; #$_->[1]=======";
-			&getEleMul($tag, $_->[1], $_->[0], \@OffNode );
-			return 1 if !@OffNode;
+		#print "\n=*=*$_->[1]*=*=*"; #$_->[1]=======";
+			return 1 if &getEleMul($tag, $_->[1], $_->[0], \@OffNode );
 			if ($path) {
 				&getE_Path_Rec( $path, \@OffNode )
 			}else {
-				#print "\n$tag PUSH\n==@$_=="				for(@OffNode);
 				push( @res, [@OffNode])
 			}
 		}
@@ -58,7 +54,7 @@ if (@ARGV) {
 	undef local $/;$whole=<>
 }else {
 	print "Element path is form of Xpath e.g: /html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nIt may be put multiply, delimited by ;\nFile name to work on: ";
-	my $file='GuiTut.html';#*
+	my $file='GuiTutorial.html';#*
 	#my $file=<>=~s/^\h+//r=~ s/\s+$//r;#
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
@@ -143,7 +139,7 @@ if (/^r/i){
 my $o;
 for (@path) {
 	$o="$_->[0]:";
-	$o.="\n==***$_->[1]***\n" for @{$_->[1]}
+	$o.="\n$_->[1]\n" for @{$_->[1]}
 }
 fileno W? print W $o:print $o;
 }
