@@ -8,25 +8,25 @@ sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole elem to sea
 }
 
 sub getEleMul {
-	my $n=$_[0];
-	my $pre='';
-	my ($off,$b)=$_[1]=~ /^(<(?>[a-z]\w*)[^>]*+>)(.*)/s;
-	while ($b=~/\G((?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$n\b[^>]*+>)(?&node))/g) {
-		push (@{$_[3]}, [$_[2].($off.=$1.$pre), $5]);
+	my ($off,$b)=$_[1]=~ /^(<(?>[a-z]\w*)[^>]*+>)(.*)/s;	my $pre='';
+	while ($b=~/\G((?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node))/g) {
+		push (@{$_[3]}, [$_[2].($off.=$pre.$1), $5]);
 		$pre=$5
 	}
 	return
 }
 
 my @res;
-sub getE_Path_Rec { my ($path, $iOffNode) = @_;
-	$path=~ s#^/([^/]+)(.*)$#$2#;	my $xpNow=$1;
+sub getE_Path_Rec { my $iOffNode = $_[1];
+	my ($tag,$nth,$path)=$_[0]=~ m#^/([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?(.*)#;
+	print "$tag = $nth =$path=";
 	my @OffNode;
 	for (@$iOffNode) {
-		$xpNow=~ m#^([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?#;
-		if($2) {
-		print "\ns1= $1  s2= $2";
-			&getElem($1, $2-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
+		print $_->[1];exit;
+
+		if($nth) {
+		print "\ns1= $tag  s2= $nth";
+			&getElem($tag, $nth-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
 			return 1 if !@OffNode;
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 			if ($path) {
@@ -35,15 +35,19 @@ sub getE_Path_Rec { my ($path, $iOffNode) = @_;
 				push( @res, [@OffNode] )
 			}
 		}else {
-			&getEleMul($1, $_->[1], $_->[0], \@OffNode );
+		print "\ns1=$tag=\n****$_->[1]*=*=*"; #$_->[1]=======";
+			&getEleMul($tag, $_->[1], $_->[0], \@OffNode );
 			return 1 if !@OffNode;
 			if ($path) {
 				&getE_Path_Rec( $path, \@OffNode )
 			}else {
+				#print "\n$tag PUSH\n==@$_=="				for(@OffNode);
 				push( @res, [@OffNode])
 			}
 		}
+
 	}
+
 	return
 }
 
@@ -54,12 +58,13 @@ if (@ARGV) {
 	undef local $/;$whole=<>
 }else {
 	print "Element path is form of Xpath e.g: /html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nIt may be put multiply, delimited by ;\nFile name to work on: ";
-	my $file='GuiTutorial.html';#*
+	my $file='GuiTut.html';#*
 	#my $file=<>=~s/^\h+//r=~ s/\s+$//r;#
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
 	print 'The element path(s): ';
-	$trPath='/html/body/main/div[1]/div[2]/div[1]/div[1]/p';
+	#$trPath='/html/body/main/div[1]/div[2]/div[1]/div[1]/p';
+	$trPath='/html/body/nav[1]/div[1]/div/a';
 	for (split(/;/,$trPath)) {#*
 	#for (split(/;/,$trPath=<>)) {#
 		L:if (m#^\s*/?/?([a-z]\w*+(?:\[(?>\d+|@[a-z]+(?:=\w+)?)\]|,\d+)?|@[a-z]\w*)(?://?(?1))*\s*$#i)	{
@@ -138,7 +143,7 @@ if (/^r/i){
 my $o;
 for (@path) {
 	$o="$_->[0]:";
-	$o.="\n$_->[1]\n" for @{$_->[1]}
+	$o.="\n==***$_->[1]***\n" for @{$_->[1]}
 }
 fileno W? print W $o:print $o;
 }
