@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 use strict;
-# Pairs of offset & same-name elem returned in 4rd arg
+
 sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole elem to search
 	if ($_[2]=~/^(<(?>[a-z]\w*|!DOC)[^>]*+>(?:(?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?>(?&at)|(?&node))*?)((?&tnode))/) {
 		 @{$_[3]}=[$1,$6];
@@ -8,6 +8,7 @@ sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole elem to sea
 	return 1
 }
 
+# Offset & same-name elem pairs returned in 4rd arg in both subs
 sub getEleMul {
 	my ($off,$b)=$_[1]=~ /^(<(?>[a-z]\w*)[^>]*+>)(.*)/s;	my $pre='';
 	while ($b=~/\G((?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node))/g) {
@@ -17,33 +18,39 @@ sub getEleMul {
 	return !$pre
 }
 
-my @res;
+my (@res,$FOUND,$MUL);
 sub getE_Path_Rec { my $iOffNode = $_[1];
 	my ($tag,$nth,$path)=$_[0]=~ m#^/([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?(.*)#;
+	$MUL |= !$nth;
 	my @OffNode;
 	for (@$iOffNode) {
-
 		print "\ns1=$tag  ",$nth?"s2= $nth":'';
 		if($nth) {
-			return 1 if &getElem($tag, $nth-1, $_->[1], \@OffNode);		# offset-node pair return is in @OffNode
+			if (&getElem( $tag, $nth-1, $_->[1], \@OffNode)) {	# offset-node pair return is in @OffNode
+				next if $FOUND or $MUL;
+				return 1;
+			}
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 			if ($path) {
-				&getE_Path_Rec( $path, \@OffNode )
+				return 1 if &getE_Path_Rec( $path, \@OffNode )
 			}else {
-				push( @res, [@OffNode] )
+				$FOUND=1;
+				push (@res, [@OffNode])
 			}
-		}else {
-		#print "\n=*=*$_->[1]*=*=*"; #$_->[1]=======";
-			return 1 if &getEleMul($tag, $_->[1], $_->[0], \@OffNode );
+		}else { #print "\n=*=*$_->[1]*=*=*"; #$_->[1]=======";
+			if (&getEleMul( $tag, $_->[1], $_->[0], \@OffNode )) {
+				next if $FOUND or $MUL;
+				return 1;
+			}
+			#print "\n===$_->[0]=\n***$_->[1]*=*" for @OffNode;
 			if ($path) {
-				&getE_Path_Rec( $path, \@OffNode )
+				return 1 if &getE_Path_Rec( $path, \@OffNode )
 			}else {
-				push( @res, [@OffNode])
+				$FOUND=1;
+				push (@res, [@OffNode])
 			}
 		}
-
 	}
-
 	return
 }
 
@@ -67,11 +74,11 @@ if (@ARGV) {
 			s/\s|\/$//g;
 			if (/^[^\/]/) {
 			 if(!$CP) {
-				print "\nRelativ path '$_'\nneeds the current path as base.";
+				print "\nRelative path '$_'\nneeds the current path as base.";
 				while(1){
 					print " Put current path: "; $CP=<>=~s/\/$//r;
 					last	if $CP=~m#^\s*(?:/html(?:/body)?)?(?:/[^/]+?(?:\[\d+\]|,\d+))++/?\s*$#;
-					print "\nInvalid specified current path. Except 'html' or 'body' each node must have a nth number."
+					print "\nInvalid specified current path. Except 'html' or 'body' each node must have a [nth] specifier"
 				}}
 				$_="$CP/$_"
 			}
@@ -101,8 +108,8 @@ for(@valid){
 if ($er){
 	print "\nCouldn't find ";
 	if (@path){
-		print "the last path\n'$miss_'\nKeep working on previous path(s) found? (Y/Enter: yes. Else: aborting) ";
-		<>=~s/^\h+//r =~/^y?$/i or die "Aborted by user\n";
+		print "the last path\n'$miss_'\nKeep doing the previous one found? (Y/Enter: yes. Else: abort) ";
+		<>=~s/^\h+//r =~/^y?$/i or die "Aborting\n";
 	}else{	die "'$miss_'\nNothing was done\n"}
 }else{
 		for(@miss){	print "Skipping non existant '$_'\n"}
@@ -126,9 +133,9 @@ unless	(@ARGV){
 	my $of=<>=~s/^\h+//r=~ s/\s+$//r;
 	open W,">","$of" or die "Cannot open '$of'\n" if($of);
 }
-# Removal, etc must be from the longest elem offset found, first sort offset lengths descendingly
 SW:
 for ($O){
+# Removal, etc must be from the longest el. offset found so first sort these lengths descendingly
 my @soffsetP=sort {length ${$b->[1]}[0] <=> ${$a->[1]}[0]} @fpath;
 if (/^r/i){
 	for(@soffsetP){
@@ -138,8 +145,8 @@ if (/^r/i){
 }
 my $o;
 for (@path) {
-	$o="$_->[0]:";
-	$o.="\n$_->[1]\n" for @{$_->[1]}
+	$o="\n$_->[0]:";
+	$o.="\n$_->[1]\n\n" for @{$_->[1]}
 }
 fileno W? print W $o:print $o;
 }
