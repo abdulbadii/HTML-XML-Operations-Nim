@@ -30,23 +30,15 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 				return 1;
 			}
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
-			if ($path) {
-				return 1 if &getE_Path_Rec ($path, \@OffNode)
-			}else {
-				$FOUND=1;
-				push (@res, @OffNode)
-			}
 		}else {
 			if (&getEleMul( $tag, $_->[1], $_->[0], \@OffNode )) {
 				next if $FOUND or $MUL;
 				return 1;
-			}
-			if ($path) {
-				return 1 if &getE_Path_Rec ($path, \@OffNode)
-			}else {
-				$FOUND=1;
-				push (@res, @OffNode)
-			}
+		}}
+		if ($path) {
+			return 1 if &getE_Path_Rec ($path, \@OffNode)
+		}else {
+			$FOUND=1;	push (@res, @OffNode)
 		}
 	}
 	return
@@ -59,15 +51,11 @@ if (@ARGV) {
 	undef local $/;$whole=<>
 }else {
 	print "Element path is form of Xpath e.g: /html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nIt may be put multiply, delimited by ;\nFile name to work on: ";
-	my $file='Gui.html';#*
-	#my $file=<>=~s/^\h+//r=~ s/\s+$//r;#
+	my $file=<>=~s/^\h+//r=~ s/\s+$//r;
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
 	print 'The element path(s): ';
-	#$trPath='/html/body/main/div[1]/div[2]/div[1]/div[1]/p';
-	$trPath='/html/body/nav[1]/div[1]/div/a';
-	for (split(/;/,$trPath)) {#*
-	#for (split(/;/,$trPath=<>)) {#
+	for (split(/;/,$trPath=<>)) {
 		L:if (m#^\s*/?/?([a-z]\w*+(?:\[(?>\d+|@[a-z]+(?:=\w+)?)\]|,\d+)?|@[a-z]\w*)(?://?(?1))*\s*$#i)	{
 			s/\s|\/$//g;
 			if (/^[^\/]/) {
@@ -95,14 +83,14 @@ if (@ARGV) {
 my ($E, @path, @miss,$miss_);
 for(@valid){
 	if ($E) {
-		print "\nSkip the missing '$miss_'\nto process the next path? (Y/Enter: yes. Else: aborting) ";
+		print "\nSkip not found '$miss_'\nto process the next path? (Y/Enter: yes. Else: aborting) ";
 		<>=~/^(?:\h*y)?$/i or die "Aborted by user\n"}
 	my @i=['',$whole];
 	if ($E=&getE_Path_Rec($_=~s#(^/html|(?<=^/html/)body)/#$1\[1\]/#gr, \@i)
 	or not $FOUND) {
 		$E=1;push(@miss,$miss_=$_)
 	}else{
-		push(@path, [$_, [@res]]);
+		push(@path, [$_, [@res]])
 	}
 }
 if ($E){	print "\nCouldn't find ";
@@ -110,9 +98,7 @@ if ($E){	print "\nCouldn't find ";
 		print "the last path\n'$miss_'\nKeep doing the previous one found? (Y/Enter: yes. Else: abort) ";
 		<>=~s/^\h+//r =~/^y?$/i or die "Aborting\n";
 	}else{	die "'$miss_'\nNothing was done\n"}
-}else{
-	print "\nSkipping not found path: $_" for(@miss)
-}
+}else{	print "\nSkipping not found path: $_" for(@miss)}
 
 # Removal, etc are optimized by filtering out path whose head is as the shorter one's
 # First sort the path lengths
@@ -145,7 +131,7 @@ if (/^r/i){
 my $o;
 for (@path) {
 	$o="\n$_->[0]:";
-	$o.="\n$_->[1]\n\n" for @{$_->[1]}
+	$o.="\n$_->[1]\n" for @{$_->[1]}
 }
 fileno W? print W $o:print $o;
 }
