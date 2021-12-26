@@ -8,7 +8,7 @@ sub getElem {	# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole elem to sea
 	return 1
 }
 
-# Offset & same-name elem pairs returned in 4rd arg in both subs
+# Offset & same-name elem pairs returned in both subs 4rd arg 
 sub getEleMul {
 	my ($off,$b)=$_[1]=~ /^(<(?>[a-z]\w*)[^>]*+>)(.*)/s;	my $pre='';
 	while ($b=~/\G((?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node))/g) {
@@ -22,9 +22,8 @@ my (@res,$FOUND,$MUL);
 sub getE_Path_Rec { my $iOffNode = $_[1];
 	my ($tag,$nth,$path)=$_[0]=~ m#^/([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?(.*)#;
 	$MUL |= !$nth;
-	my @OffNode;
 	for (@$iOffNode) {
-		print "\ns1=$tag  ",$nth?"s2= $nth":'';
+		my @OffNode;
 		if($nth) {
 			if (&getElem( $tag, $nth-1, $_->[1], \@OffNode)) {	# offset-node pair return is in @OffNode
 				next if $FOUND or $MUL;
@@ -32,22 +31,21 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 			}
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 			if ($path) {
-				return 1 if &getE_Path_Rec( $path, \@OffNode )
+				return 1 if &getE_Path_Rec ($path, \@OffNode)
 			}else {
 				$FOUND=1;
-				push (@res, [@OffNode])
+				push (@res, @OffNode)
 			}
-		}else { #print "\n=*=*$_->[1]*=*=*"; #$_->[1]=======";
+		}else {
 			if (&getEleMul( $tag, $_->[1], $_->[0], \@OffNode )) {
 				next if $FOUND or $MUL;
 				return 1;
 			}
-			#print "\n===$_->[0]=\n***$_->[1]*=*" for @OffNode;
 			if ($path) {
-				return 1 if &getE_Path_Rec( $path, \@OffNode )
+				return 1 if &getE_Path_Rec ($path, \@OffNode)
 			}else {
 				$FOUND=1;
-				push (@res, [@OffNode])
+				push (@res, @OffNode)
 			}
 		}
 	}
@@ -61,7 +59,7 @@ if (@ARGV) {
 	undef local $/;$whole=<>
 }else {
 	print "Element path is form of Xpath e.g: /html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nIt may be put multiply, delimited by ;\nFile name to work on: ";
-	my $file='GuiTutorial.html';#*
+	my $file='Gui.html';#*
 	#my $file=<>=~s/^\h+//r=~ s/\s+$//r;#
 	$!=1;-e $file or die "'$file' not exist\n";
 	$!=2;open R,"$file" or die "Cannot open '$file'\n";
@@ -91,28 +89,29 @@ if (@ARGV) {
 			}else{	die "Aborted by user\n"}
 	}}
 	undef local $/;$whole=<R>;close R;
+	print "\nProcessing on file '$file'...\n";
 }
 
-my ($er, @path, @miss,$miss_);
+my ($E, @path, @miss,$miss_);
 for(@valid){
-	if ($er) {
+	if ($E) {
 		print "\nSkip the missing '$miss_'\nto process the next path? (Y/Enter: yes. Else: aborting) ";
 		<>=~/^(?:\h*y)?$/i or die "Aborted by user\n"}
 	my @i=['',$whole];
-	if ($er=&getE_Path_Rec($_=~s#(^/html|(?<=^/html/)body|(?<=^/html/body/)main)/#$1\[1\]/#gr, \@i)) {
-		push(@miss,$miss_=$_)
+	if ($E=&getE_Path_Rec($_=~s#(^/html|(?<=^/html/)body)/#$1\[1\]/#gr, \@i)
+	or not $FOUND) {
+		$E=1;push(@miss,$miss_=$_)
 	}else{
-		push(@path, [$_, @res]);
+		push(@path, [$_, [@res]]);
 	}
 }
-if ($er){
-	print "\nCouldn't find ";
+if ($E){	print "\nCouldn't find ";
 	if (@path){
 		print "the last path\n'$miss_'\nKeep doing the previous one found? (Y/Enter: yes. Else: abort) ";
 		<>=~s/^\h+//r =~/^y?$/i or die "Aborting\n";
 	}else{	die "'$miss_'\nNothing was done\n"}
 }else{
-		for(@miss){	print "Skipping non existant '$_'\n"}
+	print "\nSkipping not found path: $_" for(@miss)
 }
 
 # Removal, etc are optimized by filtering out path whose head is as the shorter one's
