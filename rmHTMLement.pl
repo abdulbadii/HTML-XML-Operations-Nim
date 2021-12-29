@@ -81,7 +81,7 @@ if (@ARGV) {
 	print "\nProcessing on file '$file'...\n";
 }
 
-my ($E, @path, @fpath, @miss,$miss_, @short);
+my ($E, @path, @fpath, @miss, @short);
 for (sort{length $a cmp length $b} @valid) {
 	if ($E) {
 		print "\nSkip it to process the next path? (Y/Enter: yes. Else: abort) ";
@@ -107,8 +107,7 @@ if (@miss){
 		print "\nKeep processing the ones else found? (Y/Enter: yes. Else: abort) ";
 		<>=~s/^\h+//r =~/^y?$/i or die "Aborting\n";
 		print "\nSkipping not found '$_'" for(@miss)
-	}else{	print "\nThe path:";
-		print "\n$_" for @valid; print "\n",1+$#valid? "were" : "was"," not found. Nothing was done\n";exit
+	}else{	print "\nNothing was done\n";exit
 }}
 print "\nProcessing:";print "\n$_->[0]" for(@path);
 
@@ -124,7 +123,7 @@ for ($O) {
 if (! /^r/i) {
 	my $o;for (@path) {
 		$o.="\n\n$_->[0]:";
-		$o.="\n*=$_->[1]=*" for @{$_->[1]}
+		$o.="\n$_->[1]" for @{$_->[1]}
 	}
 	fileno W? print W $o:print $o;
 	last
@@ -134,8 +133,7 @@ if (! /^r/i) {
 @fpath=sort {length $b->[0] <=> length $a->[0]} @fpath;
 print "\nRemoval result:";
 for (@fpath) {
-	$whole=~ s/\A(\Q$_->[0]\E)\Q$_->[1]\E(.*)\Z/$1$2/s
-}
+	$whole=~ s/\A(\Q$_->[0]\E)\Q$_->[1]\E(.*)\Z/$1$2/s}
 fileno W? print W $whole:print $whole;
 }
 close W;
