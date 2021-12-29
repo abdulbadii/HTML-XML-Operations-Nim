@@ -2,7 +2,7 @@
 
 Get or Remove HTML element(s) in a file by specifying its path    
 
-Element path is form of Xpath e.g:
+Element path is of [Xpath](https://www.w3schools.com/xml/xpath_syntax.asp) syntax e.g:
 
 ```html/body/div[1]/div/div[2]```
 
