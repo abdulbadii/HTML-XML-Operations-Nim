@@ -9,14 +9,14 @@ sub getElem {			# $_[0]= searched elem tag  $_[1] = nth-1 $_[2]= whole elem to s
 }
 
 sub getMulNthE {
-	my ($off,$b)=$_[1]=~ /^(<(?>[a-z]\w*)[^>]*+>)(.*)/s;	my $pre='';
+	my ($hd,$b)=$_[1]=~ /^(<(?>[a-z]\w*|!DOC)[^>]*+>)(.*)/s;	my $pre='';
 	while ($b=~/\G((?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node))/g) {
-		push (@{$_[3]}, [$_[2].($off.=$pre.$1), $5]);
+		push (@{$_[3]}, [$_[2].($hd.=$pre.$1), $5]);
 		$pre=$5
 	}
 	return !$pre
 }
-# These subs return 1 if cannot find, and offset & same-name elem pairs in the 4rd arg
+# These subs return 1 if cannot find, else 0 and offset & same-name elem pairs in the 4rd arg
 
 my (@res, $MUL);
 sub getE_Path_Rec { my $iOffNode = $_[1];
@@ -33,8 +33,8 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 				next if @res or $MUL;
 				return 1}
 		}
-		if ($path) {		return 1 if &getE_Path_Rec ($path, \@OffNode)			# then propagate it to the next depth
-		}	else {					push (@res, @OffNode)
+		if ($path) {	return 1 if &getE_Path_Rec ($path, \@OffNode)			# then propagate it to the next depth
+		}	else {				push (@res, @OffNode)
 		}
 	}
 	return
@@ -46,10 +46,7 @@ if (@ARGV) {
 	$O=shift;
 	undef local $/;$whole=<>
 }else {
-	print "Element path is form of Xpath e.g: /html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nTo put multiply, delimit each by ;\nFile name to work on: ";
-	my $file=<>=~s/^\h+//r=~ s/\s+$//r;
-	$!=1;-e $file or die "\n'$file' not exist\n";
-	$!=2;open R,"$file" or die "\nCannot open '$file'\n";
+	print "Element path is form of Xpath e.g: /html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nTo put multiply at once, put one after another delimited by ;\n";
 	print '\nThe element path(s): ';
 	die "No any Xpath given\n" if ($trPath=<>)=~/^\s*$/;
 	for (split(/;/,$trPath)) {
@@ -70,8 +67,12 @@ if (@ARGV) {
 			}elsif ($y=~/^s/i) {next
 			}else{	die "Aborted\n"}
 	}}
+	print "HTML/XML file name to process: ";
+	my $file=<>=~s/^\h+//r=~ s/\s+$//r;
+	$!=1;-e $file or die "\n'$file' not exist\n";
+	$!=2;open R,"$file" or die "\nCannot open '$file'\n";
 	undef local $/;$whole=<R>;close R;
-	print "\nProcessing on file '$file'...\n";
+	print "\nProcessing HMTL document in '$file'...\n";
 }
 
 my ($E, @path, @fpath, @miss, @short);
@@ -124,9 +125,7 @@ if (! /^r/i) {
 # Removal, etc is from long to shorter el. offset of array fpath, so they're sorted descendingly
 @fpath=sort {length $b->[0] <=> length $a->[0]} @fpath;
 
-print "\nRemoval result:";
-for (@fpath) {
-	$whole=~ s/\A(\Q$_->[0]\E)\Q$_->[1]\E(.*)\Z/$1$2/s}
-fileno W? print W $whole:print $whole;
+$whole=~ s/\A(\Q$_->[0]\E)\Q$_->[1]\E(.*)\Z/$1$2/s	for (@fpath);
+fileno W? print W $whole:print "\nRemoval result:\n$whole"
 }
 close W;
