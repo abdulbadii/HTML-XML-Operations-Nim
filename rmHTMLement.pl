@@ -41,7 +41,7 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 	return
 }
 
-my ($whole, $wBEG, $wTAG, $wEND, $trPath, @valid, $O, $CP);
+my ($whole, $trPath, @valid, $O, $CP);
 if (@ARGV) {
 	$trPath=shift;
 	$O=shift;
@@ -76,7 +76,9 @@ if (@ARGV) {
 }
 
 die "\nCan't parse the HTML with ill form\nBecause likely of unbalanced tag pair\n" unless
-($wBEG,$whole,$wTAG,$wEND)=$whole=~/^(<!DOCTYPE[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<(\w++)[^>]*+>(?&cont)*+<\/\g-1>))*?<\/\g3>)(.*)/s;
+$whole=~/^(<!DOCTYPE[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<(\w++)[^>]*+>(?&cont)*+<\/\g-1>))*?<\/\g3>)(.*)/s;
+my @in=[$1,$2];
+my $wTAG=$3;
 
 my ($E, @path, @fpath, @miss, @short);
 for (sort{length $a cmp length $b} @valid) {
@@ -84,7 +86,6 @@ for (sort{length $a cmp length $b} @valid) {
 		print "\nSkip it to process the next path? (Y/Enter: yes. any else: Abort) ";
 		<>=~/^(?:\h*y)?$/i or die "Aborting\n"}
 	@res=();
-	my @in=[$wBEG,$whole];
 	s#^/([a-z]\w*)(/.*)#$2#;
 	if ($wTAG ne $1 or $E=&getE_Path_Rec ($_, \@in) or not @res and $E=1) {
 		push(@miss,$_);
@@ -127,7 +128,6 @@ if (! /^r/i) {
 # Removal, etc is from long to shorter el. offset of array fpath, so sort them descendingly
 @fpath=sort {length $b->[0] <=> length $a->[0]} @fpath;
 
-$whole=$wBEG.$whole;
 $whole=~ s/\A(\Q$_->[0]\E)\Q$_->[1]\E(.*)\Z/$1$2/s	for (@fpath);
 fileno W? print W $whole:print "\n\nRemoval result:\n$whole"
 }
