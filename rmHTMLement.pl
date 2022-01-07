@@ -27,9 +27,6 @@ sub getAllDepth {			# $_[0]= now searched el  $_[1] = nth-1 $_[2]= whole elem to
 	return !@{$_[3]}
 }
 
-sub getAllDNth {
-
-}
 
 # These subs return 1 if fails to find, else 0 and offset & same-name node pairs in the 4rd arg
 
@@ -53,7 +50,6 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 			if (&getNthElem ($tag, $nth-1, $_->[1], \@OffNode)) {			# offset-node pair return is in @OffNode
 				next if @res or $MUL;
 				return 1}
-			#print "\n'$tag' has $m depth";exit;
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 		}else {
 			if (&getAllNthE ($tag, $_->[1], $_->[0], \@OffNode )) {
