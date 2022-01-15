@@ -1,34 +1,21 @@
 #!/usr/bin/perl -w
 use strict;
 
-sub getNthElem {			# $_[0]= now searched el  $_[1] = nth-1 $_[2]= whole elem to search
-	if ($_[2]=~/^(<[a-z]\w*[^>]*+>(?:(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cont)*+<\/\g-1>)))*?(?'tnode'(?=<$_[0]\b[^>]*+>)(?&node))){$_[1]}(?&cont)*?)((?&tnode))/) {
+sub getNthElem {			# $_[0] searched el  $_[1]=nth-1  $_[2] whole el under which to search
+	if ($_[2]=~/^(<[a-z]\w*[^>]*+>(?:(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cont)*+<\/\g-1>)))*?(?'tnode'(?=<$_[0]\b)(?&node))){$_[1]}(?&cont)*?)((?&tnode))/) {
 		 @{$_[3]}=[$1,$6];
 		 return}
 	return 1
 }
 
 sub getAllNthE {
-	my $pre='';	my ($h,$b)=$_[1]=~ /^(<[a-z]\w*[^>]*+>)(.*)/s;
-	while ($b=~/\G((?>(?'at'[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)|(?'node'<(\w++)[^>]*+>(?>(?&at)|(?&node))*+<\/\g-1>))*?)((?=<$_[0]\b[^>]*+>)(?&node))/g) {
-		push (@{$_[3]}, [$_[2].($h.=$pre.$1), $5]);
-		$pre=$5
-	}
-	return !$pre
+	my $pre='';
+	return not $_[1]=~/^(<[a-z]\w*[^>]*+>)(?:((?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cont)*+<\/\g-1>)))*?)(?=<$_[0]\b)((?&node))(?{push (@{$_[3]}, [$_[2].$1.($pre.=$2), $6]); $pre.=$6}))*/
 }
 
-sub getAllDepth {			# $_[0]= now searched el  $_[1] = nth-1 $_[2]= whole elem to search  $_[4] path stub
-	my $minD=()=$_[4]=~/\//g;
-	my ($M,$d, $curE)=($_[2]);
-	while ($curE	=~/^(<[a-z]\w*[^>]*+>(?:(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cont)*+<\/\g-1>)))*?(?=<$_[0]\b[^>]*+>)(?&node)){$_[1]}(?&cont)*?)(?{$M=$d=0})((?=<$_[0]\b[^>]*+>)<(\w++)(?{$M=$d if ++$d>$M})[^>]*+>(?&cont)*+<\/\g-1>(?{--$d}))/) {
-		push (@{$_[3]}, [$1,$curE=$5]) if $M>=$minD;
-		last if --$M<$minD
-	}
-	return !@{$_[3]}
-}
-
-
-# These subs return 1 if fails to find, else 0 and offset & same-name node pairs in the 4rd arg
+		#if ($_[2]=~
+#}
+# These subs return 1 if fails to find. Else 0 and offset & node pairs in the 4rd arg
 
 my @res;my $MUL;
 sub getE_Path_Rec { my $iOffNode = $_[1];
@@ -36,17 +23,7 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 	$MUL |= !$nth;
 	for (@$iOffNode) {
 		my @OffNode;
-		if ($ADepth) {
-			if ($nth) {
-				if (&getAllDepth ($tag, $nth-1, $_->[1], \@OffNode, $path)) {
-					next if @res or $MUL;
-					return 1}
-			}else {
-				if (&getAllDNth ($tag, $path, $_->[1], \@OffNode)) {
-					next if @res or $MUL;
-					return 1}
-			}
-		}elsif ($nth) {
+		if ($nth) {
 			if (&getNthElem ($tag, $nth-1, $_->[1], \@OffNode)) {			# offset-node pair return is in @OffNode
 				next if @res or $MUL;
 				return 1}
@@ -71,8 +48,8 @@ if (@ARGV) {
 }else {
 	print "Element path is of Xpath form e.g:\n\t\t\t/html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
 	die "No any Xpath given\n" if ($trPath=<>)=~/^\s*$/;
-	for (split(/;/,$trPath)) {
-		L:if (m#^\s*/?/?([a-z]\w*+(?>\[(?>\d+|@[a-z]+(?:=\w+)?)\]|,\d+)?|@[a-z]\w*)(?://?(?1)?)*+\s*$#i) {
+	for (split /;/,$trPath) {
+		L:if (m{^\s*/?/?([a-z]\w*+(?>\[(?>\d+|@[a-z]+(?:=\w+)?)\]|,\d+)?|@[a-z]\w*)(?://?(?1)?)*+\s*$}i) {
 			s/\s|\/$//g;
 			if (/^[^\/]/) {
 				if(!$CP){
@@ -87,7 +64,7 @@ if (@ARGV) {
 			if($y=~/^e?$/i){
 				print "Edit: ";$_=<>;goto L
 			}elsif ($y=~/^s/i) { next
-			}else{	die "Aborted\n"}
+			}else{	die "Aborting\n"}
 	}}
 	print "HTML/XML file name to process: ";
 	my $file=<>=~s/^\h+//r=~ s/\s+$//r;
@@ -98,8 +75,7 @@ if (@ARGV) {
 }
 
 die "\nCan't parse the HTML with ill form\nBecause likely of unbalanced tag pair\n" unless
-$whole=~/^(<!DOCTYPE[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<(\w++)[^>]*+>(?&cont)*+<\/\g-1>))*?<\/\g3>)(.*)/s;
-
+$whole=~/^(<(?:!DOCTYPE|xml)[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<(\w++)[^>]*+>(?&cont)*+<\/\g-1>))*?<\/\g3>).*/s;
 my @in=[$1,$2]; my $wTAG=$3;
 
 my ($E, @path, @fpath, @miss, @short);
@@ -108,8 +84,8 @@ for (sort{length $a cmp length $b} @valid) {
 		print "\nSkip it to process the next path? (Y/Enter: yes. any else: Abort) ";
 		<>=~/^(?:\h*y)?$/i or die "Aborting\n"}
 	@res=();
-	s#^/([a-z]\w*)(/.*)#$2#;
-	if ($wTAG ne $1 or $E=&getE_Path_Rec ($_, \@in) or not @res and $E=1) {
+	m{^/([a-z]\w*)(/.*)};
+	if ($wTAG ne $1 or $E=&getE_Path_Rec ($2, \@in) or not @res and $E=1) {
 		push(@miss,$_);
 		print "\nCan't find '$_'"
 	}else {
@@ -130,11 +106,11 @@ if (@miss){
 	}else{	print "\nNothing was done\n";exit
 }}
 unless	(@ARGV){
-	print "\nWhich operation will be done :\n- Remove\n- Get\n(R: remove. Else: just get it) ";
+	print "\nWhich operation will be done :\n- Remove\n- Get\n(R: remove   Else key: just get it) ";
 	$O=<>=~s/^\h+//r=~ s/\s+$//r;
 	print 'File name to save the result: (hit Enter to standard output) ';
 	my $of=<>=~s/^\h+//r=~ s/\s+$//r;
-	open W,">","$of" or die "Cannot open '$of'\n" if($of)
+	open W,">","$of" or die "Cannot open '$of'\n" if $of
 }
 print "\nProcessing the path:";print "\n$_->[0]" for(@path);
 
