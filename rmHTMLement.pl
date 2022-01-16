@@ -2,20 +2,39 @@
 use strict;
 
 sub getNthElem {			# $_[0] searched el  $_[1]=nth-1  $_[2] whole el under which to search
-	if ($_[2]=~/^(<[a-z]\w*[^>]*+>(?:(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cont)*+<\/\g-1>)))*?(?'tnode'(?=<$_[0]\b)(?&node))){$_[1]}(?&cont)*?)((?&tnode))/) {
-		 @{$_[3]}=[$1,$6];
-		 return}
-	return 1
+ return not $_[2] =~/^(<[a-z]\w*[^>]*+>(?:(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?(?'tnode'(?=<$_[0]\b)(?&node))){$_[1]}(?&cnt)*?)((?&tnode))(?{@{$_[3]}=[$1,$6]})/
 }
 
-sub getAllNthE {
+sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] prev offset
 	my $pre='';
-	return not $_[1]=~/^(<[a-z]\w*[^>]*+>)(?:((?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cont)*+<\/\g-1>)))*?)(?=<$_[0]\b)((?&node))(?{push (@{$_[3]}, [$_[2].$1.($pre.=$2), $6]); $pre.=$6}))*/
+	return not $_[1] =~/^(<[a-z]\w*[^>]*+>)(?:((?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?)(?=<$_[0]\b)((?&node))(?{push (@{$_[3]}, [$_[2].$1.($pre.=$2), $6]); $pre.=$6}))*/
 }
 
-		#if ($_[2]=~
-#}
-# These subs return 1 if fails to find. Else 0 and offset & node pairs in the 4rd arg
+sub getAllDepth {			# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] prev offset $_[5] path stub
+	my ($min, $nth, $max, $d, @nd)=(++(()=$_[5]=~/\//g), $_[1]-1);
+	my @curNode=($_[4], $_[2]);
+	if ($_[1]) {
+		while (@curNode) {
+		for (@curNode) {
+			$_->[1] =~
+			/^(<[a-z]\w*[^>]*+>
+			(?:(?'cnt'(?:
+			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*)
+			(?:(?'node'<(\w++)[^>]*+>
+			(?{$max=$d if ++$d>$max})
+			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d}))
+			(?{push (@nd,[$_->[0].$2, $4]) if $max>$min; $max=0}))?
+			)*?)
+			(?'tnd'(?=<$_[0]\b)(?&node))){$nth}
+			(?&cnt)((?&tnd))(?{push (@{$_[3]}, [$1, $7]) if $max>=$min})/x;
+		}
+		@curNode=@nd; @nd=();
+	}
+	}
+	return !@{$_[3]}
+}
+
+# These subs return 1 if fails to find. Else 0 and offset & node pairs in the 4rd arg ie $_[3]
 
 my @res;my $MUL;
 sub getE_Path_Rec { my $iOffNode = $_[1];
@@ -23,17 +42,21 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 	$MUL |= !$nth;
 	for (@$iOffNode) {
 		my @OffNode;
-		if ($nth) {
-			if (&getNthElem ($tag, $nth-1, $_->[1], \@OffNode)) {			# offset-node pair return is in @OffNode
+		if ($ADepth) {
+			if (getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $path)) {
+				next if @res or $MUL;
+				return 1}
+		}elsif ($nth) {
+			if (getNthElem ($tag, $nth-1, $_->[1], \@OffNode)) {			# offset-node pair return is in @OffNode
 				next if @res or $MUL;
 				return 1}
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 		}else {
-			if (&getAllNthE ($tag, $_->[1], $_->[0], \@OffNode )) {
+			if (getAllNthE ($tag, $_->[1], $_->[0], \@OffNode )) {
 				next if @res or $MUL;
 				return 1}
 		}
-		if ($path) {	return &getE_Path_Rec ($path, \@OffNode)			# to be propagated to the next depth
+		if ($path) {	return getE_Path_Rec ($path, \@OffNode)			# to be propagated to the next depth
 		}	else {				push (@res, @OffNode)
 		}
 	}
@@ -75,7 +98,7 @@ if (@ARGV) {
 }
 
 die "\nCan't parse the HTML with ill form\nBecause likely of unbalanced tag pair\n" unless
-$whole=~/^(<(?:!DOCTYPE|xml)[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>(?'cont'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<(\w++)[^>]*+>(?&cont)*+<\/\g-1>))*?<\/\g3>).*/s;
+$whole=~/^(<(?:!DOCTYPE|xml)[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>))*?<\/\g3>).*/s;
 my @in=[$1,$2]; my $wTAG=$3;
 
 my ($E, @path, @fpath, @miss, @short);
