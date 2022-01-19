@@ -10,20 +10,20 @@ sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] pr
 	return not $_[1] =~/^(<[a-z]\w*[^>]*+>)(?:((?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?)(?=<$_[0]\b)((?&node))(?{push (@{$_[3]}, [$_[2].$1.($pre.=$2), $6]); $pre.=$6}))*/
 }
 
-sub getAllDepth {			# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] prev offset $_[5] path stub
+sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] prev offset  $_[5] path stub
 	my ($nth, $min, $ret, $max, $d, @nd)=($_[1], ++(()=$_[5]=~/\//g), $_[3]);
 	my @curNode=[$_[4], $_[2]];
 	if($nth){
 	while (@curNode) {
 		for my $onref (@curNode) {
-			my ($offset,$offtnd,$ndlen);
+			my ($offset,$offs);
 			$onref->[1]=~
 			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
-			(?:(?:
+			(?:(?'cnt'
 			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
-			(?{$offset.=$2})
+			(?{$offs=$offset.=$3})
 			(?:(?!<$_[0]\b)
-			(?'inod'(?{$max=$d=0})
+			(?'inod' (?{ $max=$d=0 })
 			(?'node'<(\w++)[^>]*+>
 			(?{$max=$d if ++$d>$max})
 			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
@@ -31,10 +31,39 @@ sub getAllDepth {			# $_[0] searched el  $_[1] nth  $_[2] el under which to sear
 				push (@nd, [$onref->[0].$offset, $+{node}]);
 				$offset.=$+{node}}})
 			)?)*+
-			(?=<$_[0]\b)(?'tnd'(?&inod))(?{ $offtnd=$offset; $offset.=$+{tnd}})){$nth}
-			(?{if ($max>=$min) {
-				push (@$ret, my @nde=[$onref->[0].$offtnd, $+{tnd}]);
-				push (@nd, @nde) if $max>$min}})/x
+			(?=<$_[0]\b)(?'tnd'(?&inod))
+			(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
+			$offset=$offs.$+{tnd} })
+			){$nth}
+			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min})
+			(?&cnt)*/x
+		}
+		@curNode=@nd; @nd=();
+	}
+	}else {
+	while (@curNode) {
+		for my $onref (@curNode) {
+			my ($offset,$offs);
+			$onref->[1]=~
+			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
+			(?:(?'cnt'
+			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
+			(?{$offs=$offset.=$3})
+			(?:(?!<$_[0]\b)
+			(?'inod' (?{ $max=$d=0 })
+			(?'node'<(\w++)[^>]*+>
+			(?{$max=$d if ++$d>$max})
+			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
+			(?{if ($max>$min) {
+				push (@nd, [$onref->[0].$offset, $+{node}]);
+				$offset.=$+{node}}})
+			)?)*+
+			(?=<$_[0]\b)(?'tnd'(?&inod))
+			(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
+			$offset=$offs.$+{tnd} })
+			)+
+			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min})
+			/x
 		}
 		@curNode=@nd; @nd=();
 	}
