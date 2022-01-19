@@ -1,8 +1,8 @@
 #!/usr/bin/perl -w
 use strict;
 
-sub getNthElem {			# $_[0] searched el  $_[1]=nth-1  $_[2] whole el under which to search
- return not $_[2] =~/^(<[a-z]\w*[^>]*+>(?:(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?(?'tnode'(?=<$_[0]\b)(?&node))){$_[1]}(?&cnt)*?)((?&tnode))(?{@{$_[3]}=[$1,$6]})/
+sub getNthElem {			# $_[0] searched el  $_[1]=nth  $_[2] whole el under which to search
+ return not $_[2] =~/^(<[a-z]\w*[^>]*+>(?:(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?(?=<$_[0]\b)((?&node))){$_[1]})(?{ @{$_[3]}=[substr($1,0,-length($5)), $5] })/
 }
 
 sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] prev offset
@@ -11,34 +11,42 @@ sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] pr
 }
 
 sub getAllDepth {			# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] prev offset $_[5] path stub
-	my ($min, $nth, $max, $d, @nd)=(++(()=$_[5]=~/\//g), $_[1]-1);
-	my @curNode=($_[4], $_[2]);
-	if ($_[1]) {
-		while (@curNode) {
-		for (@curNode) {
-			$_->[1] =~
-			/^(<[a-z]\w*[^>]*+>
-			(?:(?'cnt'(?:
-			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*)
-			(?:(?'node'<(\w++)[^>]*+>
+	my ($nth, $min, $ret, $max, $d, @nd)=($_[1], ++(()=$_[5]=~/\//g), $_[3]);
+	my @curNode=[$_[4], $_[2]];
+	if($nth){
+	while (@curNode) {
+		for my $onref (@curNode) {
+			my ($offset,$offtnd,$ndlen);
+			$onref->[1]=~
+			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
+			(?:(?:
+			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
+			(?{$offset.=$2})
+			(?:(?!<$_[0]\b)
+			(?'inod'(?{$max=$d=0})
+			(?'node'<(\w++)[^>]*+>
 			(?{$max=$d if ++$d>$max})
-			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d}))
-			(?{push (@nd,[$_->[0].$2, $4]) if $max>$min; $max=0}))?
-			)*?)
-			(?'tnd'(?=<$_[0]\b)(?&node))){$nth}
-			(?&cnt)((?&tnd))(?{push (@{$_[3]}, [$1, $7]) if $max>=$min})/x;
+			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
+			(?{if ($max>$min) {
+				push (@nd, [$onref->[0].$offset, $+{node}]);
+				$offset.=$+{node}}})
+			)?)*+
+			(?=<$_[0]\b)(?'tnd'(?&inod))(?{ $offtnd=$offset; $offset.=$+{tnd}})){$nth}
+			(?{if ($max>=$min) {
+				push (@$ret, my @nde=[$onref->[0].$offtnd, $+{tnd}]);
+				push (@nd, @nde) if $max>$min}})/x
 		}
 		@curNode=@nd; @nd=();
 	}
 	}
-	return !@{$_[3]}
+	return !@$ret
 }
 
-# These subs return 1 if fails to find. Else 0 and offset & node pairs in the 4rd arg ie $_[3]
+# These subs return 1 on failure to find. Else 0 and offset & node pairs in the 4rd arg, $_[3]
 
 my @res;my $MUL;
 sub getE_Path_Rec { my $iOffNode = $_[1];
-	my ($ADepth, $tag, $nth, $path) = $_[0]=~ m#^/(/)?([^[/,]+)(?|\[(\d+|@[^]]+)\]|,(\d+))?(.*)#;
+	my ($ADepth, $tag, $nth, $path) = $_[0]=~ m#^/(/)?([^[/,]+)(?|\[([1-9]+|@[^]]+)\]|,([1-9]+))?(.*)#;
 	$MUL |= !$nth;
 	for (@$iOffNode) {
 		my @OffNode;
@@ -47,7 +55,7 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 				next if @res or $MUL;
 				return 1}
 		}elsif ($nth) {
-			if (getNthElem ($tag, $nth-1, $_->[1], \@OffNode)) {			# offset-node pair return is in @OffNode
+			if (getNthElem ($tag, $nth, $_->[1], \@OffNode)) {			# offset-node pair return is in @OffNode
 				next if @res or $MUL;
 				return 1}
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
