@@ -11,12 +11,11 @@ sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] pr
 }
 
 sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] prev offset  $_[5] path stub
-	my ($nth, $min, $ret, $max, $d, @nd)=($_[1], ++(()=$_[5]=~/\//g), $_[3]);
+	my ($nth, $min, $ret, $max, $onref, $d, @nd,$offset,$offs) = ( $_[1], ++(()=$_[5]=~/\//g), $_[3]);
 	my @curNode=[$_[4], $_[2]];
 	if($nth){
 	while (@curNode) {
-		for my $onref (@curNode) {
-			my ($offset,$offs);
+		for $onref (@curNode) {
 			$onref->[1]=~
 			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
 			(?:(?'cnt'
@@ -33,17 +32,14 @@ sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to searc
 			)?)*+
 			(?=<$_[0]\b)(?'tnd'(?&inod))
 			(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
-			$offset=$offs.$+{tnd} })
-			){$nth}
-			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min})
-			(?&cnt)*/x
+			$offset=$offs.$+{tnd} }) ) {$nth}
+			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min }) (?&cnt)*/x
 		}
 		@curNode=@nd; @nd=();
 	}
 	}else {
 	while (@curNode) {
-		for my $onref (@curNode) {
-			my ($offset,$offs);
+		for $onref (@curNode) {
 			$onref->[1]=~
 			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
 			(?:(?'cnt'
@@ -59,11 +55,11 @@ sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to searc
 				$offset.=$+{node}}})
 			)?)*+
 			(?=<$_[0]\b)(?'tnd'(?&inod))
-			(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
-			$offset=$offs.$+{tnd} })
-			)+
-			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min})
-			/x
+			(?{ if ($max>=$min) {
+				push (@$ret, my @n=[$onref->[0].$offs, $+{tnd}]);
+				push (@nd, @n) if $max>$min;
+				$offset=$offs.$+{tnd} }})
+			)+/x
 		}
 		@curNode=@nd; @nd=();
 	}
