@@ -13,7 +13,7 @@ sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] pr
 sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] prev offset  $_[5] path stub
 	my ($nth, $min, $ret, $max, $onref, $d, @nd,$offset,$offs) = ( $_[1], ++(()=$_[5]=~/\//g), $_[3]);
 	my @curNode=[$_[4], $_[2]];
-	if($nth){
+	if($_[1]){
 	while (@curNode) {
 		for $onref (@curNode) {
 			$onref->[1]=~
@@ -22,7 +22,7 @@ sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to searc
 			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
 			(?{$offs=$offset.=$3})
 			(?:(?!<$_[0]\b)
-			(?'inod' (?{ $max=$d=0 })
+			(?'inod' (?{ $max=0 })
 			(?'node'<(\w++)[^>]*+>
 			(?{$max=$d if ++$d>$max})
 			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
@@ -32,7 +32,7 @@ sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to searc
 			)?)*+
 			(?=<$_[0]\b)(?'tnd'(?&inod))
 			(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
-			$offset=$offs.$+{tnd} }) ) {$nth}
+			$offset=$offs.$+{tnd} }) ) {$_[1]}
 			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min }) (?&cnt)*/x
 		}
 		@curNode=@nd; @nd=();
@@ -46,7 +46,7 @@ sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to searc
 			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
 			(?{$offs=$offset.=$3})
 			(?:(?!<$_[0]\b)
-			(?'inod' (?{ $max=$d=0 })
+			(?'inod' (?{ $max=0 })
 			(?'node'<(\w++)[^>]*+>
 			(?{$max=$d if ++$d>$max})
 			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
@@ -76,11 +76,11 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 	for (@$iOffNode) {
 		my @OffNode;
 		if ($ADepth) {
-			if (getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $path)) {
+			if (getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $path)) {		# offset-node pair return is in @OffNode
 				next if @res or $MUL;
 				return 1}
 		}elsif ($nth) {
-			if (getNthElem ($tag, $nth, $_->[1], \@OffNode)) {			# offset-node pair return is in @OffNode
+			if (getNthElem ($tag, $nth, $_->[1], \@OffNode)) {	
 				next if @res or $MUL;
 				return 1}
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
@@ -105,14 +105,20 @@ if (@ARGV) {
 	print "Element path is of Xpath form e.g:\n\t\t\t/html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
 	die "No any Xpath given\n" if ($trPath=<>)=~/^\s*$/;
 	for (split /;/,$trPath) {
-		L:if (m{^\s*/?/?([a-z]\w*+(?>\[(?>\d+|@[a-z]+(?:=\w+)?)\]|,\d+)?|@[a-z]\w*)(?://?(?1)?)*+\s*$}i) {
-			s/\s|\/$//g;
+		L:if (m{^\s*(?:/?(/[a-z]\w*+(?>\[(?>\d+|@[a-z]+(?:=\w+)?)\]|,\d+)?|@[a-z]\w*)|\.\.?)(?:/?(?1))*+\s*$}i) {
+			s/\s//g;
 			if (/^[^\/]/) {
 				if(!$CP){
 					print "\nRelative path '$_'\nneeds the current path as base. Put one: ";
-					$CP=<>=~s/\/$//r;
+					$CP=<>=~s#\s|/$##gr;
 				}
-				$_=	"$CP/$_";goto L
+				s/^.//;
+				if (/^\./) {
+					$CP=~s#/?[^/]+$##;
+					s#^./?#
+				}
+				$_="$CP/$_" ;
+				goto L
 			}
 			push (@valid, s/\/$//r =~s/,(\d+)/\[$1\]/gr);
 		}else {
