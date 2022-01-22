@@ -11,7 +11,7 @@ sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] pr
 }
 
 sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] its offset  $_[5] path depth
-	my ($nth, $ret, $min, $max, $onref, $d, @nd,$offset,$offs) = ( $_[1], $_[3], $_[5] );
+	my ($nth, $ret, $min, $max, $E, $onref, $d, @nd,$offset,$offs) = ( $_[1], $_[3], $_[5] );
 	my @curNode=[$_[4], $_[2]];
 	if ($_[1]){
 	while (@curNode) {
@@ -35,27 +35,25 @@ sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to searc
 			$offset=$offs.$+{tnd} })
 			){$_[1]}
 			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min })
-			(?&cnt)*
-			/x
+			(?&cnt)*/x
 		}
 		@curNode=@nd; @nd=();
-	}
-	}else {
+	}}else {
 	while (@curNode) {
 		for $onref (@curNode) {
 			$onref->[1]=~
 			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1}) (?:
 			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
 			(?{$offset.=$2})
-			(?:(?=(<$_[0]\b)|)
+			(?:(?=<$_[0]\b (?{$E=1}) |)
 			(?'inod' (?{ $max=0 })
 			(?'node'<(\w++)[^>]*+>
 			(?{$max=$d if ++$d>$max})
 			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
 			(?{if ($max>=$min) {
-				push (@$ret, [$onref->[0].$offset, $+{node}]) if $4;
-				push (@nd, [$onref->[0].$offset, $+{node}]) if $max>$min
-			}
+				push (@$ret, [$onref->[0].$offset, $+{node}]) if $E;
+				push (@nd, [$onref->[0].$offset, $+{node}]) if $max>$min;
+				$E=0}
 			$offset.=$+{node} })
 			)?)* /x
 		}
@@ -64,44 +62,63 @@ sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to searc
 	return !@$ret
 }
 
-sub getAllDepthEAtt {	# $_[0] searched el  $_[1] attribute  $_[2] el under which to search  $_[4] its offset  $_[5] depth
-	my ($att, $ret, $min, $max, $onref, $d, @nd,$offset,$offs) = ( $_[1], $_[3], $_[5] );
+sub getAllDepthEatt {	# $_[0] searched el  $_[1] attribute  $_[2] el under which to search  $_[4] its offset  $_[5] depth
+	my ($att, $ret, $min, $max, $E, $onref, $d, @nd,$offset) = ( $_[1], $_[3], $_[5] );
 	my @curNode=[$_[4], $_[2]];
-	if (0){
 	while (@curNode) {
 		for $onref (@curNode) {
 			$onref->[1]=~
 			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1}) (?:
 			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
 			(?{$offset.=$2})
-			(?:(?=(<$_[0]\s+$att)|)
+			(?:(?=(<$_[0]\s+$att) (?{$E=1}) |)
 			(?'inod' (?{ $max=0 })
 			(?'node'<(\w++)[^>]*+>
 			(?{$max=$d if ++$d>$max})
 			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
 			(?{if ($max>=$min) {
-				push (@$ret, [$onref->[0].$offset, $+{node}]) if $4;
-				push (@nd, [$onref->[0].$offset, $+{node}]) if $max>$min
-			}
+				push (@$ret, [$onref->[0].$offset, $+{node}]) if $E;
+				push (@nd, [$onref->[0].$offset, $+{node}]) if $max>$min;
+				$E=0}
 			$offset.=$+{node} })
 			)?)* /x
 		}
 		@curNode=@nd; @nd=();
-	}}
+	}
 	return !@$ret
 }
 
-sub getAllDepthAA {
-
+sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] its offset  $_[4] depth
+	my ($att, $ret, $min, $max, $E, $onref, $d, @nd,$offset) = ( $_[0], $_[3], $_[4] );
+	my @curNode=[$_[2], $_[1]];
+	while (@curNode) {
+		for $onref (@curNode) {
+			$onref->[1]=~
+			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1}) (?:
+			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
+			(?{$offset.=$2})
+			(?:(?=(<\S+\s+$att) (?{$E=1}) |)
+			(?'inod' (?{ $max=0 })
+			(?'node'<(\w++)[^>]*+>
+			(?{$max=$d if ++$d>$max})
+			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
+			(?{if ($max>=$min) {
+				push (@$ret, [$onref->[0].$offset, $+{node}]) if $E;
+				push (@nd, [$onref->[0].$offset, $+{node}]) if $max>$min;
+				$E=0}
+			$offset.=$+{node} })
+			)?)* /x
+		}
+		@curNode=@nd; @nd=();
 	}
+	return !@$ret
+}
 # These subs return 1 on failure to find. Else 0 and offset & node pairs in the 4rd arg, $_[3]
 
 my (@res, $MUL);
 sub getE_Path_Rec { my $iOffNode = $_[1];
-	my ($ADepth, $tag, $nth, $att, $allEatt, $path) =
-	$_[0]=~ m#^(/)?/
-	(?> ([^/@[]+)(?:\[(?>([1-9]+)|(@[^]]+))?\])? | (@[a-z]\w*) )
-	(.*)#x;
+	my ($ADepth, $tag, $nth, $att, $alla, $path) =
+	$_[0]=~ m{ ^(/)?/ (?> ([^/@[]+) (?:\[ (?>([1-9]+)|@([^]]+))? \])? | @([a-z]\w*) ) (.*) }x;
 	$MUL |= !$nth;
 	for (@$iOffNode) {
 		my @OffNode;
@@ -110,7 +127,7 @@ sub getE_Path_Rec { my $iOffNode = $_[1];
 			if ( $tag? $att?
 					getAllDepthEatt ($tag, $att, $_->[1], \@OffNode, $_->[0], $depth) :			# offset-node pair return is in @OffNode
 					getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $depth) :
-				getAllDepthAEatt ($allEatt, $_->[1], $_->[0], \@OffNode, $depth)) {
+				getAllDepthAatt ($alla, $_->[1], $_->[0], \@OffNode, $depth)) {
 				next if @res or $MUL;
 				return 1}
 		}elsif ($nth) {
@@ -136,7 +153,7 @@ if (@ARGV) {
 	$O=shift;
 	undef local $/;$whole=<>
 }else {
-	print "Element path is of Xpath form e.g:\n\t\t\t/html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
+	print "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere lives (by breadth or depth) under the first div element, under any\nbody element, under any html element.\n\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
 	die "No any Xpath given\n" if ($trPath=<>)=~/^\s*$/;
 	for (split /;/,$trPath) {
 		my $xpath=qr{^\h*(?:(/?/[a-z]\w*+(?:\[(?>[1-9]+|@[a-z]+(?:=\w+)?)\])?|/?/@[a-z]\w*)|\.\.?)(?1)*+[/\h]*$}i;
@@ -144,26 +161,21 @@ if (@ARGV) {
 			s#\h|/+$##g;
 			if (/^[^\/]/) {
 				if(!$CP){
-					print "\n'$_'\nis relative to base/current path and it's empty now so give one: ";
-					print "\n'$CP' is not a valid xpath" while (($CP=<>=~s#\s|/$##gr) !~ $xpath)
+					print "\n'$_'\nis relative to base/current path and it's empty, so now give one:\n";
+					print "\n'$CP' is not a valid xpath" while (($CP=<>=~s#\s|/$##gr) !~ $xpath);
 					$CP=~s#\h|/+$##g
 				}
 				s#^\./##;
-				if (/^\.\./) {
-					$CP=~s#/?[^/]+$##;
-					s#^../#
-				}
+				if (/^\.\./) {	$CP=~s#/?[^/]+$##;	s#^../##	}
 				$_="$CP/$_"
 			}
-			push (@valid, s/\/$//r =~s/,(\d+)/\[$1\]/gr);
+			push (@valid, $_);
 		}else {
-			print "'$_' is invalid Xpath\nEdit it or skip it? (E/Enter: Edit  S: Skip.  any else: Abort) ";my $y=<>;
-			if($y=~/^e?$/i){
-				print "Edit: ";$_=<>;goto L
-			}elsif ($y=~/^s/i) { next
+			print "'$_' is invalid Xpath\nSkip or abort it? (S: skip.  any else: abort) ";my $y=<>;
+			if ($y=~/^s/i) { next
 			}else{	die "Aborting\n"}
 	}}
-	print "HTML/XML file name to process: ";
+	print "\nHTML/XML file name to process: ";
 	my $file=<>=~s/^\h+//r=~ s/\s+$//r;
 	$!=1;-e $file or die "\n'$file' not exist\n";
 	$!=2;open R,"$file" or die "\nCannot open '$file'\n";
