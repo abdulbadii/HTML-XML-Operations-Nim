@@ -139,21 +139,21 @@ if (@ARGV) {
 	print "Element path is of Xpath form e.g:\n\t\t\t/html/body/div[1]/div[3]\n\n[1] may be replaced with ,1 e.g: html/body/div,1/div,3\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
 	die "No any Xpath given\n" if ($trPath=<>)=~/^\s*$/;
 	for (split /;/,$trPath) {
-		my $xpath=qr{^\s*(?:(/?/[a-z]\w*+(?:\[(?>[1-9]+|@[a-z]+(?:=\w+)?)\])?|/?/@[a-z]\w*)|\.\.?)(?1)*+\s*$}i;
-	L:if (/$xpath/) {
-			s/\s//g;
+		my $xpath=qr{^\h*(?:(/?/[a-z]\w*+(?:\[(?>[1-9]+|@[a-z]+(?:=\w+)?)\])?|/?/@[a-z]\w*)|\.\.?)(?1)*+[/\h]*$}i;
+		if (/$xpath/) {
+			s#\h|/+$##g;
 			if (/^[^\/]/) {
 				if(!$CP){
 					print "\n'$_'\nis relative to base/current path and it's empty now so give one: ";
 					print "\n'$CP' is not a valid xpath" while (($CP=<>=~s#\s|/$##gr) !~ $xpath)
+					$CP=~s#\h|/+$##g
 				}
-				s/^.//;
-				if (/^\./) {
+				s#^\./##;
+				if (/^\.\./) {
 					$CP=~s#/?[^/]+$##;
-					s#^./?#
+					s#^../#
 				}
-				$_="$CP/$_" ;
-				goto L
+				$_="$CP/$_"
 			}
 			push (@valid, s/\/$//r =~s/,(\d+)/\[$1\]/gr);
 		}else {
