@@ -7,38 +7,42 @@ sub getNthElem {			# $_[0] searched el  $_[1]=nth  $_[2] whole el under which to
 
 sub getAllNthE {			# $_[0] searched el  $_[1] el under which to search  $_[2] prev offset
 	my $pre;
-	return not $_[1] =~/^(<[a-z]\w*[^>]*+>)(?:((?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?)(?=<$_[0]\b)((?&node))(?{push (@{$_[3]}, [$_[2].$1.($pre.=$2), $6]); $pre.=$6}))*/
+	return not $_[1] =~/^(<[a-z]\w*[^>]*+>)(?:((?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?)(?=<$_[0]\b)((?&node))(?{ push (@{$_[3]}, [$_[2].$1.($pre.=$2), $6]); $pre.=$6}))*/
 }
 
-sub getAllDepth {		# $_[0] searched el  $_[1] nth  $_[2] el under which to search  $_[4] its offset  $_[5] path depth
-	my ($nth, $ret, $min, $max, $E, $onref, $d, @nd,$offset,$offs) = ( $_[1], $_[3], $_[5] );
+sub getAllDepth {		# $_[0] searched el  $_[1] nth any direc  $_[2] el under which to search  $_[4] its offset  $_[5] path depth
+	my ($ret, $min, $max, $E, $onref, $d, @nd,$offset,$offs) = ($_[3], $_[5]);
 	my @curNode=[$_[4], $_[2]];
-	if ($_[1]){
-	while (@curNode) {
-		for $onref (@curNode) {
-			$onref->[1]=~
-			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
-			(?'cnt'(?:
-			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
-			(?{$offs=$offset.=$3})
-			(?:(?!<$_[0]\b)
-			(?'inod' (?{ $max=0 })
-			(?'node'<(\w++)[^>]*+>
-			(?{$max=$d if ++$d>$max})
-			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
-			(?{if ($max>$min) {
-				push (@nd, [$onref->[0].$offset, $+{node}]);
-				$offset.=$+{node}}})
-			)?)*+
-			(?=<$_[0]\b)(?'tnd'(?&inod))
-			(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
-			$offset=$offs.$+{tnd} })
-			){$_[1]}
-			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min })
-			(?&cnt)*/x
-		}
-		@curNode=@nd; @nd=();
-	}}else {
+	if ($_[1]) {
+		my ($nth, $n) = $_[1]=~/([1-9]+)|last\((.+)\)/;
+		if ($nth) {
+			while (@curNode) {
+				for $onref (@curNode) {
+					$onref->[1]=~
+					/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
+					(?'cnt'(?:
+					((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
+					(?{$offs=$offset.=$3})
+					(?:(?!<$_[0]\b)
+					(?'inod' (?{ $max=0 })
+					(?'node'<(\w++)[^>]*+>
+					(?{$max=$d if ++$d>$max})
+					(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d})))
+					(?{if ($max>$min) {
+						push (@nd, [$onref->[0].$offset, $+{node}]);
+						$offset.=$+{node}}})
+					)?)*+
+					(?=<$_[0]\b)(?'tnd'(?&inod))
+					(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
+					$offset=$offs.$+{tnd} })
+					){$nth}
+					(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min })
+					(?&cnt)*/x
+				}
+				@curNode=@nd; @nd=();
+			}
+		}else{}					# refer nth backward
+	}else {
 	while (@curNode) {
 		for $onref (@curNode) {
 			$onref->[1]=~
@@ -116,20 +120,20 @@ sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] i
 # These subs return 1 on failure to find. Else 0 and offset & node pairs in the 4rd arg, $_[3]
 
 my (@res, $MUL);
-sub getE_Path_Rec { my $iOffNode = $_[1];
-	my ($ADepth, $tag, $nth, $att, $alla, $path) =
-	$_[0]=~ m{ ^(/)?/ (?> ([^/@[]+) (?:\[ (?>([1-9]+)|@([^]]+))? \])? | @([a-z]\w*) ) (.*) }x;
+sub getE_Path_Rec {
+	my ($ADepth, $tag, $nth, $att, $alla, $path) = $_[0]=~
+	m{ ^(/)?/ (?> ([^/@[]+) (?:\[ (?>( [1-9]+| last\([1-9]+\) ) | @([^]]+))? \])? | @([a-z]\w*) ) (.*) }x;
 	$MUL |= !$nth;
-	for (@$iOffNode) {
+	for (@{$_[1]}) {
 		my @OffNode;
 		if ($ADepth) {
-			my $depth=++(()=$path=~/\//g);
+			my $depth=1+(()=$path=~/\//g);
 			if ( $tag? $att?
 					getAllDepthEatt ($tag, $att, $_->[1], \@OffNode, $_->[0], $depth) :			# offset-node pair return is in @OffNode
 					getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $depth) :
-				getAllDepthAatt ($alla, $_->[1], $_->[0], \@OffNode, $depth)) {
-				next if @res or $MUL;
-				return 1}
+					getAllDepthAatt ($alla, $_->[1], $_->[0], \@OffNode, $depth)
+			) {	next if @res or $MUL;
+					return 1}
 		}elsif ($nth) {
 			if (getNthElem ($tag, $nth, $_->[1], \@OffNode)) {	
 				next if @res or $MUL;
@@ -153,7 +157,7 @@ if (@ARGV) {
 	$O=shift;
 	undef local $/;$whole=<>
 }else {
-	print "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere lives (by breadth or depth) under the first div element, under any\nbody element, under any html element.\n\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
+	print "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere, in breadth or depth, lives under the first div element, under any\nbody element, under any html element.\n\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
 	die "No any Xpath given\n" if ($trPath=<>)=~/^\s*$/;
 	for (split /;/,$trPath) {
 		my $xpath=qr{^\h*(?:(/?/[a-z]\w*+(?:\[(?>[1-9]+|@[a-z]+(?:=\w+)?)\])?|/?/@[a-z]\w*)|\.\.?)(?1)*+[/\h]*$}i;
