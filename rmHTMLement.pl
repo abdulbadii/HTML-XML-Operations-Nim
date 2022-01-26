@@ -10,7 +10,7 @@ sub getNthEAtt {		# $_[0] searched el  $_[1]=nth/nth backw  $_[2] el under which
 }
 
 sub getAllNthEAtt {		# $_[1] el under which to search  $_[2] its offset  $_[4]) nth range pos $_[5] attr $_[6] all nodes 
-	my ($at, $all, $a,$b,$i,$pre)= ($_[5],$_[6], 1, '+');
+	my ($at, $all, $a,$b,$i,$off)= ($_[5],$_[6], 1, '+');
 	if ($_[4]) {
 		my ($lt,$e,$n)= $_[4]=~ /(?>(<)|>)(=)?(\d+)/;
 		$b = $lt?	$e? "{$n}" : '{'.--$n.'}'	: ($a=$e? $n : $n+1, $b);
@@ -19,7 +19,7 @@ sub getAllNthEAtt {		# $_[1] el under which to search  $_[2] its offset  $_[4]) 
 	((?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?)
 	(?(?{$all})| (?=<$_[0]\b$at)) ((?&node)) (?{
 	if (++$i>=$a) {
-		push (@{$_[3]}, [$_[2].$1.($pre.=$2), $6]); $pre.=$6}
+		push (@{$_[3]}, [$_[2].$1.($off.=$2), $6]); $off.=$6}
 	}) ) $b /x
 }
 
@@ -109,7 +109,7 @@ sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] i
 	}
 	return !@$ret
 }
-# Above subs' $_[0] is searched el. tag or att. Return 1 on failure to find, else 0 and offset & node pairs in the 4rd arg, $_[3]
+# Above subs' $_[0] is searched el tag or att. Return 1 on failure to find, else 0 and offset & node pairs in the 4rd arg, $_[3]
 
 my @res;
 sub getE_Path_Rec {			# path,  offset - node pair
@@ -149,9 +149,9 @@ if (@ARGV) {
 	$trPath=shift;	$O=shift;
 	undef local $/;$whole=<>
 }else {
-	print "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any\nbody element, under any html element.\n\nTo put multiply at once, put one after another delimited by ;\nPut element path: ";
-	die "No any Xpath given\n" if ($trPath=<>)=~/^\s*$/;
-	for (split /;/,$trPath) {
+	print "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any\nbody element, under any html element.\n\nTo put multiply at once, put one after another delimited by ; or |\nPut element path: ";
+	die "No any Xpath given\n" if chomp($trPath=<>)=~/^\s*$/;
+	for (split /[|;]/,$trPath) {
 		my $xpath=qr{^\h* (?:
 		(/?/ ([a-z]\w*+) (?:\[ (?> [1-9]+ | last\(\)-[1-9]+ | position\(\)(?!<1)[<>]=?[1-9]+ | @(?'a'(?>(?2)(?:=(?2))? |\*)) ) \])? | /?/@(?&a) ) |
 		\.\.? ) (?1)*+ [/\h]*$ }x;
@@ -178,7 +178,7 @@ if (@ARGV) {
 	$!=1;-e $file or die "\n'$file' not exist\n";
 	$!=2;open R,"$file" or die "\nCannot open '$file'\n";
 	undef local $/;$whole=<R>;close R;
-	print "\nProcessing HTML document '$file'...\n";
+	print "\nProcessing HTML document '$file'...\n"
 }
 
 die "\nCan't parse the ill formed HTML because likely of unbalanced tag pair\n" unless
@@ -224,8 +224,8 @@ if($#path) {print "\nProcessing the path:";print "\n$_->[0]" for(@path)}
 for ($O){
 if (! /^r/i) {
 	my $o;for (@path) {
-		$o.="\n$_->[0]:\n";
-		$o.="\n$_->[1]\n=======\n" for @{$_->[1]}
+		$o.="\n$_->[0]:";
+		$o.="\n-------------\n$_->[1]\n" for @{$_->[1]}
 	}
 	fileno W? print W $o:print $o;
 	last

@@ -10,6 +10,6 @@ means find in a given HTML or XML file, the second div tag element that is under
 
 ```html/body/div[1]//div[1]/div[2]```
 
-means find in a given HTML or XML file, the second div tag element that is under the first div element anywhere under the first div element of any body element, under any html element.
+means find in a given HTML or XML file, the second div tag element that is under the first div element lies anywhere, by depth or breadth, in the first div element of any body element, under any html element.
 
-It may be put in multiply one after another delimited by ;
+It may be put in multiply one after another delimited by ```;``` or ```|```
