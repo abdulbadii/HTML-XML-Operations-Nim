@@ -1,63 +1,69 @@
 #!/usr/bin/perl -w
 use strict;
 
+# Node regexes
+my $HEAD= qr/<[a-z]\w*[^>]*+>/;
+my $A=qr/(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)/;			# Asymetric tag/text content. Atomic repetition is:
+my $AT= qr/$A*+/;
+my $CT= qr/((?>$A|<(\w++)[^>]*+>(?-2)*+<\/\g-1>))/;			# Content of node. Its lazy repetition is:
+my $C= qr/$CT*?/;
+my $ND= qr/<(?'t'\w++)[^>]*+>$CT*+<\/\g{t}>/;			# The node having the content
+
 sub getNthEAtt {		# $_[0] searched el  $_[1]=nth/nth backw  $_[2] el under which to search  $_[4] nth backw $_[5] attr
+	# obtain max nth +1 to solve backward nth
 	if ($_[4]) {
-		my $c=1;			# obtain max nth +1 to solve backward nth
-		$_[2]=~/^<[a-z]\w*[^>]*+>(?:(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?(?=<$_[0]\b)(?&node)(?{ ++$c }))+/;
-		$_[1]=$c-$_[4]}
-	return not $_[2] =~/^(<[a-z]\w*[^>]*+>(?:(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?(?=<$_[0]\b$_[5])((?&node))){$_[1]})(?{ @{$_[3]}=[substr($1,0,-length($5)), $5] })/
+		my $c=1; $_[2]=~/^$HEAD(?:$C(?=<$_[0]\b)$ND(?{ ++$c }))+/;	$_[1]=$c-$_[4]}
+	return not $_[2]=~ /^($HEAD(?:$C(?=<$_[0]\b$_[5])($ND)){$_[1]})(?{ @{$_[3]}=[substr($1,0,-length($4)), $4] })/
 }
 
 sub getAllNthEAtt {		# $_[1] el under which to search  $_[2] its offset  $_[4]) nth range pos $_[5] attr $_[6] all nodes 
-	my ($at, $all, $a,$b,$i,$off)= ($_[5],$_[6], 1, '+');
+	my ($att, $all, $a,$b,$i, $OFF,$off)= ($_[5],$_[6], 1, '+');
 	if ($_[4]) {
 		my ($lt,$e,$n)= $_[4]=~ /(?>(<)|>)(=)?(\d+)/;
-		$b = $lt?	$e? "{$n}" : '{'.--$n.'}'	: ($a=$e? $n : $n+1, $b);
+		$b = $lt?	$e? "{$n}" : '{'.--$n.'}'	: ($a=$e? $n : $n+1, $b)
 	}
-	return not $_[1] =~/^(<[a-z]\w*[^>]*+>) (?:
-	((?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?)
-	(?(?{$all})| (?=<$_[0]\b$at)) ((?&node)) (?{
-	if (++$i>=$a) {
-		push (@{$_[3]}, [$_[2].$1.($off.=$2), $6]); $off.=$6}
-	}) ) $b /x
+	return not $_[1] =~/^($HEAD) (?{ $OFF=$_[2].$1 })
+	(?: ($C)	(?(?{$all}) |
+	(?=<$_[0]\b$att)) ($ND)
+	(?{ if (++$i>=$a) {
+		push (@{$_[3]}, [$OFF.($off.=$2), $5]); $off.=$5}
+	})) $b /x
 }
 
+{# Node regex can count depth:
+my ($max,$dth);
+my $N= qr/(?{ $max=0 })(<(\w++)[^>]*+>(?{ $max=$dth if ++$dth>$max })(?>$A|(?-2))*+<\/\g-1>(?{--$dth}))/;
+
 sub getAllDepth {		# $_[1] nth/nth bckwrd  $_[2] search space ele $_[4] its offset $_[5] depth  $_[6] nth bckwrd
-	my ($ret, $min, $max, $E, $onref, $d, @nd,$offset,$offs) = ($_[3], $_[5]);
+	my ($ret, $min, $E, $onref, @nd,$offset,$offs) = ($_[3], $_[5]);
 	my @curNode=[$_[4], $_[2]];
 	while (@curNode) {
 		for $onref (@curNode) {
-			if ($_[6]) { my $c=1;
-				$onref->[1]=~/^<[a-z]\w*[^>]*+>(?:(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|(?'node'<(\w++)[^>]*+>(?&cnt)*+<\/\g-1>)))*?(?=<$_[0]\b)(?&node)(?{ ++$c }))+/;
-				$_[1]=$c-$_[6]
-			}
+			if ($_[6]) {
+				my $c=1; $onref->[1] =~ /^$HEAD(?:$C(?=<$_[0]\b)$ND(?{ ++$c }))+/;
+				$_[1]=$c-$_[6]}
 			$onref->[1]=~
-			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1})
-			(?'cnt'(?:
-			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
-			(?{$offs=$offset.=$3})
-			(?:(?!<$_[0]\b)	(?{ $max=0 })
-			(?'node'<(\w++)[^>]*+>
-			(?{$max=$d if ++$d>$max})
-			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d}))
-			(?{if ($max>$min) {
-				push (@nd, [$onref->[0].$offset, $+{node}]);
-				$offset.=$+{node}}})
-			)?)*+
-			(?=<$_[0]\b)(?'tnd'(?{$max=0})(?&node))
-			(?{ push (@nd, [$onref->[0].$offs, $+{tnd}]) if $max>$min;
-			$offset=$offs.$+{tnd} })
-			){$_[1]}
-			(?{ push (@$ret, [$onref->[0].$offs, $+{tnd}]) if $max>=$min })
-			(?&cnt)*/x
+			/^($HEAD) (?{ $offset=$1 }) (?:
+			(?: ($AT) (?{$offs=$offset.=$2 })
+			(?: (?!<$_[0]\b) (?'n'$N)
+			(?{ push (@nd, [$onref->[0].$offset, $+{n}]) if $max>$min;
+			$offset.=$+{n} })
+			)? )*+
+			(?=<$_[0]\b) (?'nd'$N)
+			(?{ push (@nd, [$onref->[0].$offs, $+{nd}]) if $max>$min;
+			$offset=$offs.$+{nd} })
+			) {$_[1]}
+			(?{ push (@$ret, [$onref->[0].$offs, $+{nd}]) if $max>=$min })
+			(?: (?'a'$AT) (?{ $offset.=$+{a} })
+			(?'z'$N) (?{ push (@nd, [$onref->[0].$offset, $+{z}]) if $max>$min; $offset.=$+{z} })
+			)*/x
 		}
 		@curNode=@nd; @nd=();
 	}
 }
 sub getAllDepNthRnAtt	{				# in every nth or positon within range 
 	my @curNode=[$_[2], $_[1]];
-	my ($ret, $min, $att, $all, $max, $E, $onref, $d, @nd,$offset) = ($_[3], $_[4], $_[6], $_[7]);
+	my ($ret, $min, $att, $all, $max, $M, $onref, $d, @nd,$offset) = ($_[3], $_[4], $_[6], $_[7]);
 	while (@curNode) {
 		for $onref (@curNode) {
 			my ($a,$b,$i)= (1, '+');
@@ -66,18 +72,15 @@ sub getAllDepNthRnAtt	{				# in every nth or positon within range
 				$b = $lt?	$e? "{$n}" : '{'.--$n.'}': ($a=$e? $n : $n+1, $b);
 			}
 			$onref->[1]=~
-			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1}) (?:
-			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
+			/^($HEAD)(?{$offset=$1}) (?:
+			($AT)
 			(?{$offset.=$2})
-			(?:(?=<$_[0]\b$att (?{$E=1}))?	(?{ $max=0 })
-			(?'node'<(\w++)[^>]*+>
-			(?{$max=$d if ++$d>$max})
-			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d}))
-			(?{if ($max>=$min) {
-				push (@$ret, [$onref->[0].$offset, $+{node}]) if $E and ++$i>=$a;
-				push (@nd, [$onref->[0].$offset, $+{node}]) if $max>$min;
-				$E=0}
-			$offset.=$+{node} })
+			(?:(?=<$_[0]\b$att (?{$M=1}))?
+			(?'n'$N) (?{ if ($max>=$min) {
+				push (@$ret, [$onref->[0].$offset, $+{n}]) if $M and ++$i>=$a;
+				push (@nd, [$onref->[0].$offset, $+{n}]) if $max>$min;
+				$M=0}
+			$offset.=$+{n} })
 			)?) $b /x
 		}
 		@curNode=@nd; @nd=();
@@ -86,30 +89,28 @@ sub getAllDepNthRnAtt	{				# in every nth or positon within range
 }
 
 sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] its offset  $_[4] depth
-	my ($att, $ret, $min, $max, $E, $onref, $d, @nd,$offset)= ($_[0], $_[3], $_[4]);
+	my ($att, $ret, $min, $max, $M, $onref, $d, @nd,$offset)= ($_[0], $_[3], $_[4]);
 	my @curNode=[$_[2], $_[1]];
 	while (@curNode) {
 		for $onref (@curNode) {
 			$onref->[1]=~
-			/^(<[a-z]\w*[^>]*+>)(?{$offset=$1}) (?:
-			((?'at'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>))*+)
+			/^($HEAD)(?{$offset=$1}) (?:
+			($AT)
 			(?{$offset.=$2})
-			(?:(?=<\w+$att (?{$E=1}))?	(?{ $max=0 })
-			(?'node'<(\w++)[^>]*+>
-			(?{$max=$d if ++$d>$max})
-			(?>(?&at)|(?&node))*+<\/\g-1>(?{--$d}))
+			(?: (?=<\w+$att (?{$M=1}) )?
+			(?'n'$N)
 			(?{ if ($max>=$min) {
-				push (@$ret, [$onref->[0].$offset, $+{node}]) if $E;
-				push (@nd, [$onref->[0].$offset, $+{node}]) if $max>$min;
-				$E=0}
-			$offset.=$+{node} })
+				push (@$ret, [$onref->[0].$offset, $+{n}]) if $M;
+				push (@nd, [$onref->[0].$offset, $+{n}]) if $max>$min;
+				$M=0}
+			$offset.=$+{n} })
 			)?)* /x
 		}
 		@curNode=@nd; @nd=();
 	}
 	return !@$ret
 }
-# Above subs' $_[0] is searched el tag or att. Return 1 on failure to find, else 0 and offset & node pairs in the 4rd arg, $_[3]
+}# Above subs' $_[0] is searched el tag or att. Return 1 on failure to find, else 0 and offset & node pairs in the 4rd arg, $_[3]
 
 my @res;
 sub getE_Path_Rec {			# path,  offset - node pair
@@ -152,9 +153,8 @@ if (@ARGV) {
 	print "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any\nbody element, under any html element.\n\nTo put multiply at once, put one after another delimited by ; or |\nPut element path: ";
 	die "No any Xpath given\n" if chomp($trPath=<>)=~/^\s*$/;
 	for (split /[|;]/,$trPath) {
-		my $xpath=qr{^\h* (?:
-		(/?/ ([a-z]\w*+) (?:\[ (?> [1-9]+ | last\(\)-[1-9]+ | position\(\)(?!<1)[<>]=?[1-9]+ | @(?'a'(?>(?2)(?:=(?2))? |\*)) ) \])? | /?/@(?&a) ) |
-		\.\.? ) (?1)*+ [/\h]*$ }x;
+		my $xpath=qr{^ \h* (?:
+		(//? ([a-z]\w*+) (?:\[ (?> [1-9]+ | last\(\)-[1-9]+ | position\(\)(?!<1)[<>]=?[1-9]+ | @(?'a'(?>(?2)(?:=(?2))? |\*)) ) \])? | //?@(?&a) |//?\*) | \.\.? ) (?1)*+ [/\h]*$ }x;
 		if (/$xpath/) {
 			s#\h|/+$##g;
 			if (/^[^\/]/) {
@@ -182,7 +182,7 @@ if (@ARGV) {
 }
 
 die "\nCan't parse the ill formed HTML because likely of unbalanced tag pair\n" unless
-$whole=~m{^(<(?>!DOCTYPE|xml)[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>(?'cnt'(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<([a-z]\w*+)[^>]*+>(?&cnt)*+</\g-1>))*?</\g3>)(?&cnt)*};
+$whole=~m{^(<(?>!DOCTYPE|xml)[^>]*+>[^<]*)(<([a-z]\w*)[^>]*+>$C</\g3>)$C};
 my @in=[$1,$2]; my $firsTAG=$3;
 
 my ($ER, @path, @fpath, @miss, @short);
