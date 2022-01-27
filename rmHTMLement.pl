@@ -23,14 +23,14 @@ sub getAllNthEAtt {		# $_[1] el under which to search  $_[2] its offset  $_[4]) 
 		$b = $lt?	$e? "{$n}" : '{'.--$n.'}'	: ($a=$e? $n : $n+1, $b)
 	}
 	return not $_[1] =~/^($HEAD) (?{ $OFF=$_[2].$1 })
-	(?: ($C)	(?(?{$all}) |
-	(?=<$_[0]\b$att)) ($ND)
+	(?: ($C)
+	(?(?{$all}) | (?=<$_[0]\b$att)) ($ND)
 	(?{ if (++$i>=$a) {
 		push (@{$_[3]}, [$OFF.($off.=$2), $5]); $off.=$5}
 	})) $b /x
 }
 
-{# Node regex can count depth:
+{# Node regex tp count depth
 my ($max,$dth);
 my $N= qr/(?{ $max=0 })(<(\w++)[^>]*+>(?{ $max=$dth if ++$dth>$max })(?>$A|(?-2))*+<\/\g-1>(?{--$dth}))/;
 
@@ -40,8 +40,7 @@ sub getAllDepth {		# $_[1] nth/nth bckwrd  $_[2] search space ele $_[4] its offs
 	while (@curNode) {
 		for $onref (@curNode) {
 			if ($_[6]) {
-				my $c=1; $onref->[1] =~ /^$HEAD(?:$C(?=<$_[0]\b)$ND(?{ ++$c }))+/;
-				$_[1]=$c-$_[6]}
+				my $c=1; $onref->[1]=~ /^$HEAD(?:$C(?=<$_[0]\b)$ND(?{ ++$c }))+/;	$_[1]=$c-$_[6]}
 			$onref->[1]=~
 			/^($HEAD) (?{ $offset=$1 }) (?:
 			(?: ($AT) (?{$offs=$offset.=$2 })
@@ -63,7 +62,7 @@ sub getAllDepth {		# $_[1] nth/nth bckwrd  $_[2] search space ele $_[4] its offs
 }
 sub getAllDepNthRnAtt	{				# in every nth or positon within range 
 	my @curNode=[$_[2], $_[1]];
-	my ($ret, $min, $att, $all, $max, $M, $onref, $d, @nd,$offset) = ($_[3], $_[4], $_[6], $_[7]);
+	my ($ret, $min, $att, $all, $M, $onref, @nd,$offset) = ($_[3], $_[4], $_[6], $_[7]);
 	while (@curNode) {
 		for $onref (@curNode) {
 			my ($a,$b,$i)= (1, '+');
@@ -89,7 +88,7 @@ sub getAllDepNthRnAtt	{				# in every nth or positon within range
 }
 
 sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] its offset  $_[4] depth
-	my ($att, $ret, $min, $max, $M, $onref, $d, @nd,$offset)= ($_[0], $_[3], $_[4]);
+	my ($att, $ret, $min, $M, $onref, @nd,$offset)= ($_[0], $_[3], $_[4]);
 	my @curNode=[$_[2], $_[1]];
 	while (@curNode) {
 		for $onref (@curNode) {
@@ -110,7 +109,7 @@ sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] i
 	}
 	return !@$ret
 }
-}# Above subs' $_[0] is searched el tag or att. Return 1 on failure to find, else 0 and offset & node pairs in the 4rd arg, $_[3]
+}# Above subs' $_[0] : searched el tag or att. Returns 1 on failure finding, else 0 and offset & node pairs in the 4rd arg, $_[3]
 
 my @res;
 sub getE_Path_Rec {			# path,  offset - node pair
@@ -122,21 +121,20 @@ sub getE_Path_Rec {			# path,  offset - node pair
 		my @OffNode;
 		if ($AllDepth) {
 			my $depth=1+(()=$path=~/\//g);					# offset-node pair return is in @OffNode..
-			if ($tag?
-				$nth?
+			if ($tag?	$nth?
 					getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $depth, $nrev)
 				: getAllDepNthRnAtt ($tag, $_->[1], $_->[0], \@OffNode, $depth, $range, $attg)
-			: getAllDepthAatt ($aatt, $_->[1], $_->[0], \@OffNode, $depth) ){
-				next if length($_->[0]) < length(${$_[1]}[-1]->[0]);			# no error return yet if there's node else checked by offset length
+				: getAllDepthAatt ($aatt, $_->[1], $_->[0], \@OffNode, $depth) ){
+				next if \$_->[0] != \${$_[1]}[-1];			# no error return yet if there's the next node, not equal to last reference
 				return !@res}
 		}elsif ($nth) {
 			if (getNthEAtt ($tag, $nth, $_->[1], \@OffNode, $nrev, $attg)) {	
-				next if length($_->[0]) < length(${$_[1]}[-1]->[0]);
+				next if \$_->[0] != \${$_[1]}[-1];
 				return !@res}
 			${$OffNode[0]}[0]=$_->[0].${$OffNode[0]}[0];
 		}else {
 			if (getAllNthEAtt ($tag, $_->[1], $_->[0], \@OffNode, $range, $attg, $allnode)) {
-				next if length($_->[0]) < length(${$_[1]}[-1]->[0]);
+				next if \$_->[0] != \${$_[1]}[-1];
 				return !@res}
 		}
 		if ($path)	{		$R=getE_Path_Rec ($path, \@OffNode)					# ..to always propagate to the next
