@@ -116,12 +116,14 @@ sub getE_Path_Rec {			# path,  offset - node pair
 	for (@{$_[1]}) {
 		my @OffNode;
 		if ($AllDepth) {
-			my $depth=1+(()=$path=~/\//g);					# offset-node pair return is in @OffNode..
-			if ($tag?	$nth?
+			my $depth=split /\//,$path;
+			if ($tag?	$nth?									# offset-node pair return is in @OffNode..
 					getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $depth, $nrev)
-				: getAllDepNthRnAtt ($tag, $_->[1], $_->[0], \@OffNode, $depth, $range, $attg)
+					: getAllDepNthRnAtt ($tag, $_->[1], $_->[0], \@OffNode, $depth, $range, $attg)
 				: getAllDepthAatt ($aatt, $_->[1], $_->[0], \@OffNode, $depth) ){
-				next if \$_ != \${$_[1]}[-1];			# no error return yet if there's the next node ie. if not equal to last reference
+							# no error return yet if there's a next must-search
+							# ie if current reference still not equal to the last's
+				next if \$_ != \${$_[1]}[-1];
 				return !@res}
 		}elsif ($nth) {
 			if (getNthEAtt ($tag, $nth, $_->[1], \@OffNode, $nrev, $attg)) {	
@@ -146,9 +148,9 @@ if (@ARGV) {
 }else {
 	print "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |\nPut element path: ";
 	die "No any Xpath given\n" if chomp($trPath=<>)=~/^\s*$/;
+	my $xpath=qr{ ^ \h* (?:
+	(//? ([a-z]\w*+) (?:\[ (?> [1-9]+ | last\(\)-[1-9]+ | position\(\)(?!<1)[<>]=?[1-9]+ | @(?'a'(?>(?2)(?:=(?2))? |\*)) ) \])? | //?@(?&a) |//?\*) | \.\.? ) (?1)*+ [/\h]*$ }x;
 	for (split /[|;]/,$trPath) {
-		my $xpath=qr{^ \h* (?:
-		(//? ([a-z]\w*+) (?:\[ (?> [1-9]+ | last\(\)-[1-9]+ | position\(\)(?!<1)[<>]=?[1-9]+ | @(?'a'(?>(?2)(?:=(?2))? |\*)) ) \])? | //?@(?&a) |//?\*) | \.\.? ) (?1)*+ [/\h]*$ }x;
 		if (/$xpath/) {
 			s#\h|/+$##g;
 			if (/^[^\/]/) {
