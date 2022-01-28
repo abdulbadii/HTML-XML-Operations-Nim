@@ -110,7 +110,7 @@ sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] i
 
 my @res;
 sub getE_Path_Rec {			# path,  offset - node pair
-	my ($AllDepth, $tag, $nth,$nrev,$range, $attg, $aatt, $allnode, $path, $R) = $_[0] =~
+	my ($AllDepth, $tag, $nth,$nrev,$range, $attg, $aatt, $allnode, $path) = $_[0] =~
 	m{ ^(/)?/ (?> ([^/@*[]+) (?> \[ (?>([1-9]+ | last\(\)-([1-9]+)) | position\(\)(?!<1)([<>]=?\d+) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*) }x;
 	$attg=$attg? '\s+'.($attg eq '*'? '\S' : $attg) :'';	$aatt=$aatt? '\s+'.($aatt eq '*'? '\S' : $aatt) :'';
 	for (@{$_[1]}) {
@@ -121,10 +121,8 @@ sub getE_Path_Rec {			# path,  offset - node pair
 					getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $depth, $nrev)
 					: getAllDepNthRnAtt ($tag, $_->[1], $_->[0], \@OffNode, $depth, $range, $attg)
 				: getAllDepthAatt ($aatt, $_->[1], $_->[0], \@OffNode, $depth) ){
-							# no error return yet if there's a next must-search
-							# ie if current reference still not equal to the last's
-				next if \$_ != \${$_[1]}[-1];
-				return !@res}
+				next if \$_ != \${$_[1]}[-1];											# no error return yet
+				return !@res}												#if there's a next must-search ie if current reference still not equal to the last's
 		}elsif ($nth) {
 			if (getNthEAtt ($tag, $nth, $_->[1], \@OffNode, $nrev, $attg)) {	
 				next if \$_ != \${$_[1]}[-1];
@@ -135,10 +133,13 @@ sub getE_Path_Rec {			# path,  offset - node pair
 				next if \$_ != \${$_[1]}[-1];
 				return !@res}
 		}
-		if ($path)	{		$R=getE_Path_Rec ($path, \@OffNode)					# ..to always propagate to the next
-		}	else {					push (@res, @OffNode)	}
+		if ($path)	{
+				my $R=getE_Path_Rec ($path, \@OffNode);					# ..to always propagate to the next
+				return $R if \$_ == \${$_[1]}[-1]
+		}	else {
+				push (@res, @OffNode)}
 	}
-	return $R
+	return
 }
 
 my ($whole, $trPath, @valid, $O, $CP);
