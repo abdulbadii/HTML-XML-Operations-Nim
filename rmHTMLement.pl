@@ -2,12 +2,12 @@
 use strict;
 
 # HTML regexes
-my $HEAD= qr/<[a-z]\w*[^>]*+>/;
-my $AT=qr{(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>|<[a-z]\w*.*?/>)};			# Asymetric tag/text content
+my $HEAD= qr/<[a-z]\w*+[^>]*+>/;
+my $AT=qr{(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)};			# Asymetric tag/text content
 my $A= qr/$AT*+/;
 my $CT= qr/((?>$AT|<(\w++)[^>]*+>(?-2)*+<\/\g-1>))/;			# Content of node. Its lazy repetition is:
 my $C= qr/$CT*?/;
-my $ND= qr/<(?'t'\w++)[^>]*+>$CT*+<\/\g{t}>/;			# The node having the content
+my $ND= qr{<(?'n'[a-z]\w*+)[^>]*+>$CT*+<\/\g{n}>|<[a-z]\w*+.*?/>};		# Node may have the content or closed on headtag 
 
 sub getNthEAtt {		# $_[0] searched el  $_[1]=nth/nth backw  $_[2] el under which to search  $_[4] nth backw $_[5] attr
 	# obtain max nth +1 to solve backward nth
@@ -171,7 +171,6 @@ if (@ARGV) {
 	$!=1;-e $file or die "\n'$file' not exist\n";
 	$!=2;open R,"$file" or die "\nCannot open '$file'\n";
 	undef local $/;$whole=<R>;close R;
-
 	print "\nChecking HTML document '$file'... "
 }
 die "can't parse it due to its ill-formed of HTML unbalanced tag pair\n" unless $whole=~m{^\s*((?:<\?xml\b[^>]*+>\s*)?<!DOCTYPE[^>]*+>[^<]*)($ND)$C};
