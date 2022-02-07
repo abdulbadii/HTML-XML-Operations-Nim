@@ -27,13 +27,13 @@ sub getENthAllAtt {		# $_[1] el under which to search  $_[2] its offset  $_[4]) 
 	(?{ if (++$i>=$a) {	push (@{$_[3]}, [$OFF.($off.=$2), $5]); $off.=$5 } }) )$b /x
 }
 
-{# Node regex to count depth
+# Node regex to count depth
 my ($MAX,$DTH);
 my $N= qr/(?{ $MAX=0 })(<(\w++)[^>]*+>(?{ $MAX=$DTH if ++$DTH>$MAX })(?>$AT|(?-2))*+<\/\g-1>(?{--$DTH}))/;
 
 sub getAllDepth {		# $_[1] nth/nth bckwrd  $_[2] search space element
 															# $_[4] its offset  $_[5] depth  $_[6] nth bckwrd
-	my ($ret, $min, $E, $onref, @nd,$offset,$offs) = ($_[3], $_[5]);
+	my ($ret, $min, $onref, @nd,$offset,$offs) = ($_[3], $_[5]);
 	my @curNode=[$_[4], $_[2]];
 	while (@curNode) {
 		for $onref (@curNode) {
@@ -57,6 +57,7 @@ sub getAllDepth {		# $_[1] nth/nth bckwrd  $_[2] search space element
 		}
 		@curNode=@nd; @nd=();
 	}
+	return !@$ret
 }
 sub getAllDepNthRnAtt	{				# in every nth or positon within range 
 	my @curNode=[$_[2], $_[1]];
@@ -106,7 +107,7 @@ sub getAllDepthAatt {	# $_[0] attribute  $_[1] el under which to search  $_[2] i
 	}
 	return !@$ret
 }
-}# Above subs' $_[0] : searched el tag or att. Returns 1 on failure finding, else 0 and offset & node pairs in the 4rd arg, $_[3]
+# Above subs' $_[0] : searched el tag or att. Returns 1 on failure finding, else 0 and offset & node pairs in the 4rd arg, $_[3]
 
 my @res;
 sub getE_Path_Rec {			# path,  offset - node pair
@@ -121,8 +122,8 @@ sub getE_Path_Rec {			# path,  offset - node pair
 					getAllDepth ($tag, $nth, $_->[1], \@OffNode, $_->[0], $depth, $nrev)
 					: getAllDepNthRnAtt ($tag, $_->[1], $_->[0], \@OffNode, $depth, $range, $attg)
 				: getAllDepthAatt ($aatt, $_->[1], $_->[0], \@OffNode, $depth) ){
-				next if \$_ != \${$_[1]}[-1];											# no error return yet
-				return !@res}												#if there's a next must-search ie if current reference still not equal to the last's
+				next if \$_ != \${$_[1]}[-1];											# no error return yet check if there's next must-search
+				return !@res}															# (if current reference not yet equal to the last's) so loop in the next
 		}elsif ($nth) {
 			if (getNthEAtt ($tag, $nth, $_->[1], \@OffNode, $nrev, $attg)) {	
 				next if \$_ != \${$_[1]}[-1];
