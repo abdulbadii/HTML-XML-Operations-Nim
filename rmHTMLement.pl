@@ -3,9 +3,10 @@ use strict;
 
 # HTML regexes
 my $HEAD= qr/^<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>/;
-my $A=qr{(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)};			# Asymetric tag/text content
-my $C= qr{((?>$A|<(\w++)[^>]*+>(?-2)*+</\g-1>))};			# Content of node in lazy mode repetition or none
-my $ND= qr{(<([a-z]\w*+)[^>]*+>(?>$A|[^/>]*+/>|(?-2))*+</\g-1>)}; # Node that may have the content or head closing 
+my $A=qr/(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)/;			# Asymetric tag/text content
+# Node that may have the content or head closing 
+my $ND= qr{(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?>$A|(?-2))*+</\g-1>))};
+my $C= qr/(?>$A|$ND)/;			# Content of node
 
 sub getNthEAtt {		# $_[0] searched el  $_[1]=nth/nth backw  $_[2] el under which to search  $_[4] nth backw $_[5] attr
 	# obtain max nth +1 to solve backward nth
@@ -27,7 +28,8 @@ sub getENthAllAtt {		# $_[1] el under which to search  $_[2] its offset  $_[4]) 
 
 # Node regex to count depth
 my ($MAX,$DTH);
-my $N= qr{(?{ $MAX=0 })(<(\w++)[^>]*+>(?{ $MAX=$DTH if ++$DTH>$MAX })(?>$A|[^/>]*+/>|(?-2))*+</\g-1>(?{--$DTH}))};
+my $N= qr{ (?{ $MAX=0 }) (
+<(\w++)[^>]*+> (?>[^/>]*+/> | (?{ $MAX=$DTH if ++$DTH>$MAX }) (?>$A|(?-2))*+ </\g-1> (?{--$DTH})) ) }x;
 
 sub getAllDepth {		# $_[1] nth/nth bckwrd  $_[2] search space element
 															# $_[4] its offset  $_[5] depth  $_[6] nth bckwrd
