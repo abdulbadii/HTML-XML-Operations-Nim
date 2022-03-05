@@ -30,14 +30,13 @@ var
 
 # this node function is direct closed tag node or nested node content
 # it's just the header/wrapper for the recursive node search function inside
-proc node( str:string; restr :var string; tag :string= r"[a-z]\w*+"; ftag:bool=true, count :bool=true, att:string="") :bool=
+proc node( str:string; restr :var string; tag :string= r"[a-z]\w*+"; ftag:bool=true, att:string="") :bool=
   var tot, max, d :uint
   proc nodeR( str :string; restr :var string; tag :string=r"[a-z]\w*+"; litag :string="") :bool=
     var m= str.find( re(
          "(?xs) ^<(" & tag & r") (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" ))
     if m.isNone: return false
-    if count:
-      inc(tot);inc(d); if d > max: max = d
+    inc(tot);inc(d); if d > max: max = d
     var
       g= m.get.captures.toSeq
       curlitag= g[0].get()
@@ -59,8 +58,7 @@ proc node( str:string; restr :var string; tag :string= r"[a-z]\w*+"; ftag:bool=t
           dec(d)
           if litag != "" :
             remain= str[ 2+curlitag.len..^1]
-            totN=tot
-            maxND=max
+            totN=tot; maxND=max
           return true
         else: break
       elif nodeR( str, restr):
@@ -117,24 +115,31 @@ proc getNthEAtt( offnode :var seq[array[2,string]]; nod, nodOff, tag :string; nt
   isERROR
 
 proc getAllEAtt( offnode :var seq[array[2,string]]; nod, nodOff, tag, posn :string; attg, aatt :string; allnode :char) :bool=
- var
-  off, offset, res :string
-  i, a,b :uint
- #if posn != "":          # Get lower/upper bound number for >/<
-
- if nod.head( off):
+  var
+    off, offset, res :string
+    i, a, b, n :uint
+  if posn != "":          # Get lower/upper bound number for >/<
+    let
+     g= posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
+     eq= g[1].isSome
+     n=g[2].get().strUint
+    if g[0].isSome:
+      b= if eq: n else: n-1
+    else:
+      a = if eq: n else: n+1
+  if nod.head(off):
    while true:
-     off &= nodeCtn( remain, tag)
-     if node( remain, res, tag) :
-       offset = off
-       off &= res
-       inc(i)
-       if i >= a:
-         if b < 1 or i <= b:
-           offnode.add( [ nodOff & offset, res ] )
-   if offnode.len > 0:
-    return isSUCCED
- isERROR
+    off &= nodeCtn( remain, tag)
+    if node( remain, res, tag) :
+      offset = off
+      off &= res
+      inc(i)
+      if i > a:
+       if b < 1 or i <= b:
+        offnode.add( [ nodOff & offset, res ] )
+    else: break
+   if offnode.len > 0: return isSUCCED
+  isERROR
 
 var
  resultArr :seq[ array[ 2,string] ]
@@ -182,8 +187,8 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
       #else:
        #getAllDepthAatt newOffNode, u[1], u[0], aatt, remDepth
     #:
-      #if i < offsetNode.high : continue
-      #return resultArr.len==0
+      #if i < offsetNode.high : continue           # if fail finding, if not the last in loop, go on iterating
+      #return resultArr.len==0                    # else (if the last) return 1/true if as overall failing
     #el
     if isNth:
       if getNthEAtt( newOffNode, u[1], u[0], tag, nth, nthRev):
@@ -222,7 +227,7 @@ else:
   #"/html/body/a[position()>=2]" #*
   #"/html/body//a[1]/span" #*
   #"/html/body/main//@class" #*
-  ("/html[1]/body[1]/nav[1]/a[1]/div[2]","Gui.html") #*
+  ("/html[1]/body[1]/nav[1]/a[1]/div","Gui.html") #*
   #GuiTutorial.html" #*
 if pathStr.len==0: echo "\nNo Xpath given";quit(0)
 
