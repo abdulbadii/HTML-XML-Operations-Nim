@@ -1,13 +1,5 @@
-#echo off & "\noff t=", type(off), "\nstr=", str, "\ncls=", clsg; quit(0) #*#echo "\n=", off, "\n=*=",str,"===END==="#*
-#var nod, tagname :string
-#let whole = readfile("Gui.html")
-#var m= whole.find( re"(?xs) ^\s* (?: <\?xml\b [^>]*+> \s* )? <!DOCTYPE[^>]*+> [^<]* (.+)" )
-#if m.isNone: echo "\ninvalid HTML file";quit(1)
-#tagname = "html"
-#if node( m.get.captures[0], nod, tagname):
-  #echo "Y\n=" & nod
-#else: echo "No not a node with tag name:" & tagname
-import std/[os, terminal, nre, options, math, algorithm] #, sequtils
+import std/[os, terminal, nre, options, math, algorithm]
+
 func strUint(str: string) :uint=
   for i, c in str:
     if c in '0'..'9':
@@ -22,16 +14,17 @@ let             # ML regexes
   nond= r"(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)++"   # no/asymetric tag: no node content
   at= re("^(" & nond & ")(?s)(.+)")
   nodRE= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?>" & nond & r"|(?-2))*+</\g-1>))"
-  ct= "(?>" & nond & "|" & nodRE & ")"       # node content
+  ct= "(?>" & nond & "|" & nodRE & ")"                    # node content
 
 var
  remain :string
  totN, maxND :uint
-
 # this node function is direct closed tag node or nested node content
 # it's just the header/wrapper for the recursive node search function inside
+
 proc node( str:string; restr :var string; tag :string= r"[a-z]\w*+"; ftag:bool=true, att:string="") :bool=
-  var tot, max, d :uint
+  var
+   tot, max, d :uint
   proc nodeR( str :string; restr :var string; tag :string=r"[a-z]\w*+"; litag :string="") :bool=
     var m= str.find( re(
          "(?xs) ^<(" & tag & r") (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" ))
@@ -88,36 +81,51 @@ proc nodeCtn( str:string; tag:string) :string =
   remain= str
   off
 
+const
+  isERROR = true
+  isSUCCED = false
+
 proc head( nd :string; off :var string) :bool {.inline.}=
   var m= nd.match(re"(?s)^(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)(.+)")
   if m.isSome:
     off= m.get.captures[0]
     remain= m.get.captures[1]
-    return true
-  false
-
-const
-  isERROR = true
-  isSUCCED = false
+    return isSUCCED
+  isERROR
 
 proc getNthEAtt( offnode :var seq[array[2,string]]; nod, nodOff, tag :string; nth:uint; nthRev:bool) :bool =
-  #if nthRev > 0:          # Get max nth +1 #var i=1
-  var off, offset, res :string
+  var
+   nth = nth
+   off, offset, res :string
+   i :uint
   if nod.head( off):
-    for _ in 1..nth:
+   return isERROR
+  if nthRev:             # Get max nth +1 #var i=1
+    var remainB = remain
+    while true:
       off &= nodeCtn( remain, tag)
       if node( remain, res, tag):
         offset = off
         off &= res
-      else: return isERROR
-    offnode.add( [nodOff & offset, res])
-    return isSUCCED
-  isERROR
+        inc(i)
+      else: break
+    if i < nth : return isERROR
+    nth = i-nth
+    remain = remainB
+    off = ""
+  for _ in 1..nth:
+    off &= nodeCtn( remain, tag)
+    if node( remain, res, tag):
+      offset = off
+      off &= res
+    else: return isERROR
+  offnode.add( [nodOff & offset, res])
+  return isSUCCED
 
 proc getAllEAtt( offnode :var seq[array[2,string]]; nod, nodOff, tag, posn :string; attg, aatt :string; allnode :char) :bool=
   var
     off, offset, res :string
-    i, a, b, n :uint
+    i, a, b :uint
   if posn != "":          # Get lower/upper bound number for >/<
     let
      g= posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
@@ -128,7 +136,8 @@ proc getAllEAtt( offnode :var seq[array[2,string]]; nod, nodOff, tag, posn :stri
     else:
       a = if eq: n else: n+1
   if nod.head(off):
-   while true:
+   return isERROR
+  while true:
     off &= nodeCtn( remain, tag)
     if node( remain, res, tag) :
       offset = off
@@ -138,7 +147,7 @@ proc getAllEAtt( offnode :var seq[array[2,string]]; nod, nodOff, tag, posn :stri
        if b < 1 or i <= b:
         offnode.add( [ nodOff & offset, res ] )
     else: break
-   if offnode.len > 0: return isSUCCED
+  if offnode.len > 0: return isSUCCED
   isERROR
 
 var
@@ -150,19 +159,16 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
     nth :uint
     tag, posn, attg, aatt :string
     allnode :char
-    nthRev = false
     remPath = g[8].get()
     isDepths = g[0].isSome
     isTag = g[1].isSome
-    isNthRev = g[2].isSome
+    nthRev = g[2].isSome
     isNth = g[3].isSome
     isPosn = g[4].isSome
     isAttg = g[5].isSome
     isAatt = g[6].isSome
   if isTag:
     tag = g[1].get()
-    if isNthRev:
-      nthRev = true
     if isNth:
       nth = g[3].get().strUint()
     elif isPosn:
@@ -206,7 +212,7 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
     newOffNode.setlen(0)
   isSUCCED
 
-var             ###   MAIN   ###
+var             ###   MAIN   ##
   valPaths :seq[ string]
   cmdLine = commandLineParams()
   y :char
@@ -222,13 +228,8 @@ let (pathStr, file) = if cmdLine.len > 0:
    whole = readFile(l)
   (cmdLine[2], cmdLine[3])
 else:
-  echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put two info below\nElement path:\nHTML/XML file name: " #
-  # (readLine(stdin), readLine(stdin)) #
-  #"/html/body/a[position()>=2]" #*
-  #"/html/body//a[1]/span" #*
-  #"/html/body/main//@class" #*
-  ("/html[1]/body[1]/nav[1]/a[1]/div","Gui.html") #*
-  #GuiTutorial.html" #*
+  echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put two info below\nElement path:\nHTML/XML file name: " 
+   (readLine(stdin), readLine(stdin)) 
 if pathStr.len==0: echo "\nNo Xpath given";quit(0)
 
 let xpath=
@@ -262,10 +263,9 @@ if fileExists(file):
     echo "\nCannot open '",file,"': ",e.msg
 else:
   echo "\n'",file,"' doesn't exist\n";quit(0)
-echo "\nPath _ ", pathStr #*
 echo "\nChecking HTML document '",file,"'... "
 
-let               # Validating ML format:
+let                  # Validating ML format:
  m= whole.find(re(
    r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" ))
  g = m.get.captures.toSeq
