@@ -22,22 +22,23 @@ var
 # this node function is direct closed tag node or nested node content
 # it's just the header/wrapper for real recursive node search function inside
 
-proc node( str:string; restr :var string; tag :string= r"[a-z]\w*+"; ftag:bool=true, att:string="") :bool=
-
-  var tot, max, d :uint
-  proc nodeR( str :string; restr :var string; tag :string=r"[a-z]\w*+"; litag :string="") :bool=
+proc node( str:string; res :var string; tag :string= r"[a-z]\w*+"; ftag:bool=true, att:string="") :bool=
+  var
+   tag = tag & r"\b"
+   tot, max, d :uint
+  proc nodeR( str :string; res :var string; tag :string=r"[a-z]\w*+"; nodeName :string="") :bool=
     var m= str.find( re(
          "(?xs) ^<(" & tag & ") (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" ))
     if m.isNone: return false
     inc(tot);inc(d); if d > max: max = d
     var
       g= m.get.captures.toSeq
-      curlitag= g[0].get()
-      off = "<" & curlitag
+      tagname= g[0].get()
+      off = "<" & tagname
       clsdNod = g[1]
       str = g[3].get()
     if clsdNod.isSome:
-      restr= off & clsdNod.get(); remain= str; return true
+      res= off & clsdNod.get(); remain= str; return true
     off &= g[2].get()
     while true:
       m = str.find( at)
@@ -45,28 +46,30 @@ proc node( str:string; restr :var string; tag :string= r"[a-z]\w*+"; ftag:bool=t
         off &= m.get.captures[0]
         str= m.get.captures[1]
       elif str[0..1] == "</" :
-        curlitag &= ">"
-        if str[ 2..<2+curlitag.len] == curlitag :
-          restr= off & "</" & curlitag
+        tagname &= ">"
+        if str[ 2..<2+tagname.len] == tagname :
+          res= off & "</" & tagname
           dec(d)
-          if litag != "" :
-            remain= str[ 2+curlitag.len..^1]
+          if nodeName != "" :
+            remain= str[ 2+tagname.len..^1]
             totN=tot; maxND=max
           return true
         else: break
-      elif nodeR( str, restr):
-        off &= restr
-        str= str[ restr.len..^1]
+      elif nodeR( str, res):
+        off &= res
+        str= str[ res.len..^1]
       else: break
     false
-  var
-   tag= tag & r"\b"
-   m= str.find( re("(?<=^<)" & tag) )
-  if m.isNone: return false
-  if att != "" : tag &= r"\s+" & att
-  nodeR str, restr, if ftag: tag else:("(?!" & tag & r")[a-z]\w*+"), m.get.match
+  if not ftag:
+    tag= "(?!" & tag & r")[a-z]\w*+"
+  if att != "" :
+    tag &= r"\s+" & att
+  var m= str.find( re("(?<=^<)" & tag))
+  if m.isNone:
+    return false
+  nodeR str, res, tag, m.get.match
 
-proc nodeCtn( str :string, tag= r"[a-z]\w*+", ftag=false, att="") :string=
+proc nodeCtn( str :string, tag= r"[a-z]\w*+", ftag=true, att="") :string=
   remain = str
   var off, restr :string
   while true:
@@ -74,7 +77,7 @@ proc nodeCtn( str :string, tag= r"[a-z]\w*+", ftag=false, att="") :string=
     if m.isSome:
       off &= m.get.captures[0]
       remain = m.get.captures[1]
-    elif node( str, restr, tag, ftag, att):
+    if node( remain, restr, tag, ftag, att):
       off &= restr
     else: break
   off
@@ -91,30 +94,30 @@ proc head( nd :string; off :var string) :bool {.inline.}=
     return isSUCCED
   isERROR
 
-proc getNthRev( tag :string; nth :var uint) :bool=
+proc getNthRev( tag :string; nth :uint; n :var uint) :bool=
   var
    off, res :string
    remainB = remain
    i :uint
   while true:
-    off &= nodeCtn( remain, tag)
+    off &= nodeCtn( remain, tag, false)
     if node( remain, res, tag):
       off &= res
       inc(i)
     else: break
-  if i < nth : return isERROR
-  nth = i-nth           # i, max nth is subtracted with nth
+  if i < nth: return false
+  n = 1+i-nth              # i as max nth is subtracted with nth
   remain = remainB
-  isSUCCED
+  true
 
 proc getNthEAtt( ret :var seq[array[2,string]]; nod, nodOff, tag :string; nth:uint; nthRev:bool) :bool =
   var
    off, offset, res :string
-   nth = nth
+   n = nth
   if nod.head( offset): return isERROR
-  if nthRev and getNthRev( tag, nth) : return isERROR
-  for _ in 1..nth:
-    offset &= nodeCtn( remain, tag)
+  if nthRev and not getNthRev( tag, nth, n) : return isERROR
+  for _ in 1..n:
+    offset &= nodeCtn( remain, tag, false)
     if node( remain, res, tag):
       off = offset
       offset &= res
@@ -137,7 +140,7 @@ proc getAllEPosN( ret :var seq[array[2,string]]; nod, nodOff, tag, posn :string)
  else:
    a = if eq: n else: n+1
  for i in 1..b:
-  off &= nodeCtn( remain, tag)
+  off &= nodeCtn( remain, tag, false)
   if node( remain, res, tag, true) :
     offset = off
     off &= res
@@ -149,15 +152,15 @@ proc getAllEAtt( ret :var seq[array[2,string]]; nod, nodOff:string; tag, att, aa
   if nod.head(off): return isERROR
   if tag != "":
    while true:
-    off &= nodeCtn( remain, tag, att=att)
-    if node( remain, res, tag, true, att) :
+    off &= nodeCtn( remain, tag, false, att=att)
+    if node( remain, res, tag, att=att) :
      offset = off
      off &= res
      ret.add( [ nodOff & offset, res])
     else: break
   elif aatt != "":
    while true:
-    off &= nodeCtn( remain, att=aatt)
+    off &= nodeCtn( remain, ftag=false, att=aatt)
     if node( remain, res, att= aatt) :
      offset = off
      off &= res
@@ -165,6 +168,10 @@ proc getAllEAtt( ret :var seq[array[2,string]]; nod, nodOff:string; tag, att, aa
     else: break
   else:
    while true:
+    var m = remain.find(at)
+    if m.isSome:
+     off &= m.get.captures[0]
+     remain = m.get.captures[1]
     if node( remain, res) :
      offset = off
      off &= res
@@ -176,33 +183,35 @@ var
  resultArr :seq[ array[ 2,string]]
  avgNumNdPly :uint
 
-proc getAllDepth( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :uint; tag :string; nth:uint; nthRev:bool) :bool=
+proc getAllDNth( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :uint; tag :string; nth:uint; nthRev:bool) :bool=
  var
-  nd, curNode = newSeqOfCap[ array[ 2, string]](avgNumNdPly)
-  nth = nth
+  curNode, nd = newSeqOfCap[ array[ 2, string]](avgNumNdPly)
+  n = nth
+  nthFind = true
  curNode.add( [nodOff, nod] )
  while curNode.len > 0:
   for onref in curNode:
    var off, offset, res :string
    if onref[1].head(offset) : return isERROR
-   if nthRev:
-    if getNthRev( tag, nth) : return isERROR
-   for _ in 0..nth :
-     while true:
+   if nthRev: nthFind= getNthRev( tag, nth, n)
+   block N:
+    if nthFind:
+     for _ in 1..n:
+      while true:
        var m = remain.find( at)
        if m.isSome:
-         offset &= m.get.captures[0]; off= offset
+         offset &= m.get.captures[0]
          remain = m.get.captures[1]
-       elif node( remain, res, tag, false) :
+       if node( remain, res, tag, false) :
         if maxND > mindepth: nd.add( [onref[0] & offset, res] )
         offset &= res
        else: break
-     if node( remain, res, tag) :
+      if node( remain, res, tag) :
        if maxND > mindepth: nd.add( [onref[0] & offset, res] )
        off = offset
        offset &= res
-   if maxND >= mindepth:
-     ret.add( [onref[0] & off, res] )
+      else: break N
+     if maxND >= mindepth: ret.add( [onref[0] & off, res] )
    while true:
      var m = remain.find( at)
      if m.isSome:
@@ -215,7 +224,7 @@ proc getAllDepth( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :
   curNode = nd; nd.setlen(0)
  ret.len==0
 
-proc getAllDepNthRnAtt( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :uint; tag, posn, attg :string) :bool=
+proc getAllDPosn( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :uint; tag, posn, attg :string) :bool=
  var
   nd, curNode = newSeqOfCap[ array[ 2, string]](avgNumNdPly)
  curNode.add( [nodOff, nod] )
@@ -234,13 +243,14 @@ proc getAllDepNthRnAtt( ret :var seq[array[2,string]]; nod, nodOff :string; mind
      else:
        a = if eq: n else: n+1
    if onref[1].head(offset) : return isERROR
-   for i in 0..b :
+   while true:
     var m = remain.find( at)
     if m.isSome:
      offset &= m.get.captures[0]; off= offset
      remain = m.get.captures[1]
     elif node( remain, res, tag) :
-     if maxND >= mindepth and i >= a :
+     inc(i)
+     if maxND >= mindepth and i >= a and (b==0 or i <= b):
       ret.add( [onref[0] & offset, res])
     elif node( remain, res) :
      if maxND > mindepth:
@@ -283,12 +293,13 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
     if isAllDepths:                     # all depths under current //
      if isTag:
       if isNth:
-       getAllDepth retOffNode, u[1], u[0], remDepth, tag, nth, nthRev # retOffNode is offset-node..
+       getAllDNth retOffNode, u[1], u[0], remDepth, tag, nth, nthRev   # retOffNode is offset-node found..
+      elif isPosn:
+       getAllDPosn retOffNode, u[1], u[0], remDepth, tag, posn, attg
       else:
-       getAllDepNthRnAtt retOffNode, u[1], u[0], remDepth, tag, posn, attg
+        false#getAllDAtt retOffNode, u[1], u[0], remDepth, tag, att=attg
      else:
-      false
-      #getAllDepthAatt retOffNode, u[1], u[0], aatt, remDepth
+      false #getAllDepthAatt retOffNode, u[1], u[0], aatt, remDepth
     elif isTag:
      if isNth:
       getNthEAtt( retOffNode, u[1], u[0], tag, nth, nthRev)
@@ -297,12 +308,12 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
      else:
       getAllEAtt( retOffNode, u[1], u[0], tag, att= attg)
     else:
-     getAllEAtt( retOffNode, u[1], u[0], aatt= aatt)
+     getAllEAtt( retOffNode, u[1], u[0], aatt= aatt)     # be any of these true, it'd has failed finding
     :
-     if i < offsetNode.high: continue           # if fail finding but not the last in loop, go on iterating
-     return resultArr.len==0                 # otherwise return true (1) if overall fails, 0 if any finding
+     if i < offsetNode.high: continue        # but if it's not the last in loop, go on iterating
+     return resultArr.len==0                 # otherwise return true (1) if finding none or 0 if finding any
    if remPath.len > 0:
-    let e = getE_Path_R( remPath, retOffNode)       # ..which will always propagate to the next whose...
+    let e = getE_Path_R( remPath, retOffNode)       #...which will always propagate to the next whose
     if i==offsetNode.high : return e              # boolean result is return if this is the last iteration
    else:
     resultArr.add( retOffNode)
@@ -325,8 +336,9 @@ let (pathStr, file) = if cmdLine.len > 0:
    whole = readFile(l)
   (cmdLine[2], cmdLine[3])
 else:
-  echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put in the two data: Element path and HTML/XML file name:\n"
+  echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |.\nPut in two data, Element path and HTML/XML file name:\n"
    (readLine(stdin), readLine(stdin)) 
+  #"/html[1]/body[1]/nav[1]/a[1]/div"
 if pathStr.len==0: echo "\nNo Xpath given";quit(0)
 
 let xpath=
@@ -394,10 +406,10 @@ for u in valPaths:
     miss.add(u); echo "\nCan't find: ",u
   else:
     path.add( (u, resultArr) )
-    block RMV:
-      for s in short:   # filter out duplicate path or path with the same head as shorter one
-       if u.contains(re(r"^\Q" & s & r"\E")) : break RMV
-      fpath.add(resultArr)
+    block F:
+     for s in short:   # filter out duplicate path or path with the same head as shorter one
+      if u.contains(re(r"^\Q" & s & r"\E")) : break F
+     fpath.add(resultArr)
     short.add(u)
 
 if miss.len > 0:
@@ -407,7 +419,7 @@ if miss.len > 0:
   else: echo "\nNothing was done";quit(0)
 
 if cmdLine.len==0:
-  echo "\n\nWhich operation will be done :\n- Remove\n- Get\n(R: remove. Else key: extract) "
+  echo "\n\nWhich operation will be done :\n- Remove\n- Extract\n(R: remove. Else key: extract) "
   op=getch()
   echo "File name to save the result: (hit Enter to standard output) "
   outf=readLine(stdin).replace(re"^\h+|\s+$", "")
