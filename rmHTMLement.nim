@@ -61,33 +61,41 @@ proc node( str:string; res :var string; tag :string= r"[a-z]\w*+"; ftag:bool=tru
       else: break
     false
   if not ftag:
-    tag= "(?!" & tag & r")[a-z]\w*+"
-  if att != "" :
-    tag &= r"\s+" & att
-  var m= str.find( re("(?<=^<)" & tag))
+   tag= "(?!" & tag & r")[a-z]\w*+"
+  if att != "":
+   tag &= r"\s+" & att
+  let m= str.find( re("(?<=^<)" & tag))
   if m.isNone:
-    return false
+   return false
   nodeR str, res, tag, m.get.match
 
-proc nodeCtn( str :string, tag= r"[a-z]\w*+", ftag=true, att="") :string=
-  remain = str
-  var off, restr :string
-  while true:
-    var m = remain.find(at)
-    if m.isSome:
-      off &= m.get.captures[0]
-      remain = m.get.captures[1]
-    if node( remain, restr, tag, ftag, att):
-      off &= restr
-    else: break
-  off
+proc nodeCtn( str :string, tag="", ftag=true, att="") :string=
+ var tag=tag
+ if tag != "":
+  tag &= r"\b"
+  if att != "": tag &= r"\s+" & att
+  tag= if ftag: "(?=<" & tag & ")" else: "(?!<" & tag & r")"
+ let m = str.find(re( "(?s)^((?:" & nond & "|" & tag & nodRE & ")*+)(.+)" ))
+ remain = m.get.captures[3]
+ m.get.captures[0]
+ #remain = str
+ #var off, restr :string
+ #while true:
+   #var m = remain.find(at)
+   #if m.isSome:
+     #off &= m.get.captures[0]
+     #remain = m.get.captures[1]
+   #if node( remain, restr, tag, ftag, att):
+     #off &= restr
+   #else: break
+ #off
 
 const
  isERROR = true
  isSUCCED = false
 
-proc head( nd :string; off :var string) :bool {.inline.}=
-  var m= nd.match(re"(?s)^(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)(.+)")
+proc head( n :string; off :var string) :bool {.inline.}=
+  var m= n.match(re"(?s)^(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)(.+)")
   if m.isSome:
     off= m.get.captures[0]
     remain= m.get.captures[1]
@@ -106,65 +114,62 @@ proc getNthRev( tag :string; nth :uint; n :var uint) :bool=
       inc(i)
     else: break
   if i < nth: return false
-  n = 1+i-nth              # i as max nth is subtracted with nth
+  n = 1+i-nth              # i as max from which nth is subtracted
   remain = remainB
   true
 
-proc getNthEAtt( ret :var seq[array[2,string]]; nod, nodOff, tag :string; nth:uint; nthRev:bool) :bool =
+proc getNthE( ret :var seq[array[2,string]]; nod, nodOff, tag :string; nth:uint; nthRev:bool) :bool =
   var
-   off, offset, res :string
+   offset, res :string
    n = nth
   if nod.head( offset): return isERROR
   if nthRev and not getNthRev( tag, nth, n) : return isERROR
-  for _ in 1..n:
+  for i in 1..n:
     offset &= nodeCtn( remain, tag, false)
     if node( remain, res, tag):
-      off = offset
-      offset &= res
+     if i < n: offset &= res
     else: return isERROR
-  ret.add( [nodOff & off, res])
+  ret.add( [nodOff & offset, res])
   isSUCCED
 
-proc getAllEPosN( ret :var seq[array[2,string]]; nod, nodOff, tag, posn :string) :bool=
+proc getE_PosN( ret :var seq[array[2,string]]; nod, nodOff, tag, posn :string) :bool=
  var
-  off, offset, res :string
-  a, b :uint
- if nod.head(off):
-  return isERROR
+  off, res :string
+  i, a, b :uint
+ if nod.head(off): return isERROR
  let             # Get lower/upper bound number for >/<
   g= posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
   eq= g[1].isSome
   n= g[2].get().strUint
  if g[0].isSome:
-   b= if eq: n else: n-1
+  b= if eq: n else: n-1
  else:
-   a = if eq: n else: n+1
- for i in 1..b:
+  a = if eq: n else: n+1
+ while true:
   off &= nodeCtn( remain, tag, false)
-  if node( remain, res, tag, true) :
-    offset = off
+  if node( remain, res, tag, true):
+    inc(i)
+    if i >= a and (b==0 or i <= b):
+     ret.add( [nodOff & off, res])
     off &= res
-    if i >= a : ret.add( [nodOff & offset, res])
- ret.len == 0
+ ret.len==0
 
-proc getAllEAtt( ret :var seq[array[2,string]]; nod, nodOff:string; tag, att, aatt :string="") :bool=
-  var off, offset, res :string
+proc getE_AllN( ret :var seq[array[2,string]]; nod, nodOff:string; tag, att, aatt :string="") :bool=
+  var off, res :string
   if nod.head(off): return isERROR
   if tag != "":
    while true:
     off &= nodeCtn( remain, tag, false, att=att)
     if node( remain, res, tag, att=att) :
-     offset = off
+     ret.add( [ nodOff & off, res])
      off &= res
-     ret.add( [ nodOff & offset, res])
     else: break
   elif aatt != "":
    while true:
     off &= nodeCtn( remain, ftag=false, att=aatt)
     if node( remain, res, att= aatt) :
-     offset = off
+     ret.add( [ nodOff & off, res])
      off &= res
-     ret.add( [ nodOff & offset, res])
     else: break
   else:
    while true:
@@ -173,11 +178,10 @@ proc getAllEAtt( ret :var seq[array[2,string]]; nod, nodOff:string; tag, att, aa
      off &= m.get.captures[0]
      remain = m.get.captures[1]
     if node( remain, res) :
-     offset = off
+     ret.add( [ nodOff & off, res])
      off &= res
-     ret.add( [ nodOff & offset, res])
     else: break
-  ret.len == 0
+  ret.len==0
 
 var
  resultArr :seq[ array[ 2,string]]
@@ -191,12 +195,12 @@ proc getAllDNth( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :u
  curNode.add( [nodOff, nod] )
  while curNode.len > 0:
   for onref in curNode:
-   var off, offset, res :string
+   var offset, res :string
    if onref[1].head(offset) : return isERROR
    if nthRev: nthFind= getNthRev( tag, nth, n)
    block N:
     if nthFind:
-     for _ in 1..n:
+     for i in 1..n:
       while true:
        var m = remain.find( at)
        if m.isSome:
@@ -208,10 +212,9 @@ proc getAllDNth( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :u
        else: break
       if node( remain, res, tag) :
        if maxND > mindepth: nd.add( [onref[0] & offset, res] )
-       off = offset
-       offset &= res
+       if i < n: offset &= res
       else: break N
-     if maxND >= mindepth: ret.add( [onref[0] & off, res] )
+     if maxND >= mindepth: ret.add( [onref[0] & offset, res] )
    while true:
      var m = remain.find( at)
      if m.isSome:
@@ -225,36 +228,34 @@ proc getAllDNth( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :u
  ret.len==0
 
 proc getAllDPosn( ret :var seq[array[2,string]]; nod, nodOff :string; mindepth :uint; tag, posn, attg :string) :bool=
- var
-  nd, curNode = newSeqOfCap[ array[ 2, string]](avgNumNdPly)
- curNode.add( [nodOff, nod] )
+ var nd, curNode = newSeqOfCap[ array[ 2, string]](avgNumNdPly)
+ curNode.add( [nodOff, nod])
  while curNode.len > 0:
   for onref in curNode:
    var
     off, offset, res :string
     i, a, b :uint
    if posn != "":          # Get lower/upper bound number for >/<
-     let
-      g= posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
-      eq= g[1].isSome
-      n= g[2].get().strUint
-     if g[0].isSome:
-       b= if eq: n else: n-1
-     else:
-       a = if eq: n else: n+1
-   if onref[1].head(offset) : return isERROR
+    let
+     g= posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
+     eq= g[1].isSome
+     n= g[2].get().strUint
+    if g[0].isSome:
+      b= if eq: n else: n-1
+    else:
+      a = if eq: n else: n+1
+   if onref[1].head( offset) : return isERROR
    while true:
     var m = remain.find( at)
     if m.isSome:
      offset &= m.get.captures[0]; off= offset
      remain = m.get.captures[1]
-    elif node( remain, res, tag) :
+    if node( remain, res, tag) :
      inc(i)
-     if maxND >= mindepth and i >= a and (b==0 or i <= b):
+     if i >= a and (b==0 or i <= b) and maxND >= mindepth:
       ret.add( [onref[0] & offset, res])
     elif node( remain, res) :
-     if maxND > mindepth:
-      nd.add( [onref[0] & offset, res])
+     if maxND > mindepth: nd.add( [onref[0] & offset, res])
      offset &= res
   curNode = nd; nd.reset
  ret.len==0
@@ -264,7 +265,7 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
     g=(path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\)(?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" )).get.captures.toSeq
     nth :uint
     tag, posn, attg, aatt :string
-    allnode :bool
+    allNode :bool
     remPath = g[8].get()
     isAllDepths = g[0].isSome
     isTag = g[1].isSome
@@ -284,7 +285,7 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
   elif isAatt:
     aatt = g[6].get()
   else:
-    allnode = true       # * for any node
+    allNode = true       # * for any node
   var
    remDepth= 1 + numChr(remPath,'/')
    retOffNode= newSeqOfCap[ array[ 2,string]](avgNumNdPly)       # the will-be offset-node result
@@ -302,15 +303,18 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
       false #getAllDepthAatt retOffNode, u[1], u[0], aatt, remDepth
     elif isTag:
      if isNth:
-      getNthEAtt( retOffNode, u[1], u[0], tag, nth, nthRev)
+      getNthE( retOffNode, u[1], u[0], tag, nth, nthRev)
      elif isPosn:
-      getAllEPosN( retOffNode, u[1], u[0], tag, posn)
+      getE_PosN( retOffNode, u[1], u[0], tag, posn)
      else:
-      getAllEAtt( retOffNode, u[1], u[0], tag, att= attg)
-    else:
-     getAllEAtt( retOffNode, u[1], u[0], aatt= aatt)     # be any of these true, it'd has failed finding
+      getE_AllN( retOffNode, u[1], u[0], tag, att= attg)
+    elif isAatt:
+     getE_AllN( retOffNode, u[1], u[0], aatt= aatt)
+    elif allNode:
+     getE_AllN( retOffNode, u[1], u[0])             # be any of these true, it has failed finding
+    else: quit("BUG IN XPATH VALIDATION RE",0)
     :
-     if i < offsetNode.high: continue        # but if it's not the last in loop, go on iterating
+     if i < offsetNode.high: continue        # see, if it's not the last in loop, go on iterating
      return resultArr.len==0                 # otherwise return true (1) if finding none or 0 if finding any
    if remPath.len > 0:
     let e = getE_Path_R( remPath, retOffNode)       #...which will always propagate to the next whose
@@ -336,9 +340,8 @@ let (pathStr, file) = if cmdLine.len > 0:
    whole = readFile(l)
   (cmdLine[2], cmdLine[3])
 else:
-  echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |.\nPut in two data, Element path and HTML/XML file name:\n"
+  echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |\nPut in two data, Element path and HTML/XML file name:\n"
    (readLine(stdin), readLine(stdin)) 
-  #"/html[1]/body[1]/nav[1]/a[1]/div"
 if pathStr.len==0: echo "\nNo Xpath given";quit(0)
 
 let xpath=
@@ -384,7 +387,7 @@ if m.isNone or not node( g[3].get(), restr) or
   not r.contains(re("(" & nodRE & r"\s*)*")):
    echo "\ncan't parse it due to ill-form or unbalanced tag pair mark-up language\nAborting";quit(0)
 
-let maxFouND = (totN.float* 2/ 3).uint
+let maxFouND = (totN.float * 2 / 3).uint
 var
  innd= @[ [g[0].get(), g[1].get() & "</" & g[2].get() & ">"] ]
  path = newSeqOfCap[ ( string, seq[ array[ 2, string] ]) ](valPaths.len)
