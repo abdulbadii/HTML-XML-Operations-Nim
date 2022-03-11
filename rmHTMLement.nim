@@ -1,14 +1,17 @@
 import std/[os, terminal, nre, math, algorithm]
 
-func strUint(str: string) :uint=
-  for i, c in str:
-    if c in '0'..'9':
-      result += cast[uint]((ord(c) - ord('0')) * 10^(str.high-i))
-    else:
-      raise newException(ValueError, "Non-number in string")
-func numChr(s: string, c :char) :uint {.inline.}=
-  for u in s:
-    if u==c : inc(result)
+template strUint( str :string) :uint=
+ var res :uint
+ for i, c in str:
+  if c in '0'..'9': res += ((ord(c) - 48) * 10^(str.high-i)).uint
+  else: raise newException(ValueError, "Non-number in string")
+ res
+
+template numChr( c :char, s: string) :uint=
+ var res :uint
+ for i in s:
+  if i==c: inc(res)
+ res
 
 let             # ML regexes
   nond= r"(?>[^<>]|<(?>meta|link|input|img|hr|base)\b[^>]*+>)++"   # no/asymetric tag: no node content
@@ -132,38 +135,37 @@ proc getNthE( ret :var seq[array[2,string]]; nod, nodOff, tag :string; nth:uint;
   ret.add( [nodOff & offset, res])
   isSUCCED
 
-proc getE_PosN( ret :var seq[array[2,string]]; nod, nodOff, tag, posn :string) :bool=
+template abPosN( posn :string) =
  var
-  off, res :string
-  i, a, b :uint
- if nod.head(off): return isERROR
- let             # Get lower/upper bound number for >/<
+  i {.inject.}, a {.inject.}, b {.inject.}:uint
   g= posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
   eq= g[1].isSome
-  n= g[2].get().strUint
+  n= g[2].get().strUint       # Get a b as lower/upper bound number
  if g[0].isSome:
-  b= if eq: n else: n-1
- else:
-  a = if eq: n else: n+1
- while true:
-  off &= nodeCtn( remain, tag, false)
-  if node( remain, res, tag, true):
-    inc(i)
-    if i >= a and (b==0 or i <= b):
-     ret.add( [nodOff & off, res])
-    off &= res
- ret.len==0
+    b= if eq: n else: n-1
+ else:   a = if eq: n else: n+1
 
-proc getE_AllN( ret :var seq[array[2,string]]; nod, nodOff:string; tag, att, aatt :string="") :bool=
+proc getE_AllN( ret :var seq[array[2,string]]; nod, nodOff:string; tag, posn, att, aatt :string="") :bool=
   var off, res :string
   if nod.head(off): return isERROR
   if tag != "":
-   while true:
-    off &= nodeCtn( remain, tag, false, att=att)
-    if node( remain, res, tag, att=att) :
-     ret.add( [ nodOff & off, res])
-     off &= res
-    else: break
+   if posn != "":
+    abPosN posn
+    while true:
+     off &= nodeCtn( remain, tag, false)
+     if node( remain, res, tag, true):
+      inc(i)
+      if i >= a and (b==0 or i <= b):
+       ret.add( [nodOff & off, res])
+      off &= res
+     else: break
+   else:
+    while true:
+     off &= nodeCtn( remain, tag, false, att=att)
+     if node( remain, res, tag, att=att) :
+      ret.add( [ nodOff & off, res])
+      off &= res
+     else: break
   elif aatt != "":
    while true:
     off &= nodeCtn( remain, ftag=false, att=aatt)
@@ -287,7 +289,7 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
   else:
     allNode = true       # * for any node
   var
-   remDepth= 1 + numChr(remPath,'/')
+   remDepth = 1 + numChr('/', remPath)
    retOffNode= newSeqOfCap[ array[ 2,string]](avgNumNdPly)       # the will-be offset-node result
   for i, u in offsetNode:
    if
@@ -304,10 +306,8 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
     elif isTag:
      if isNth:
       getNthE( retOffNode, u[1], u[0], tag, nth, nthRev)
-     elif isPosn:
-      getE_PosN( retOffNode, u[1], u[0], tag, posn)
      else:
-      getE_AllN( retOffNode, u[1], u[0], tag, att= attg)
+      getE_AllN( retOffNode, u[1], u[0], tag, posn, att= attg)
     elif isAatt:
      getE_AllN( retOffNode, u[1], u[0], aatt= aatt)
     elif allNode:
