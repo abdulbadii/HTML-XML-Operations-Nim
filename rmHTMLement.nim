@@ -22,13 +22,7 @@ var
  offset, res, remain :string
  totN, maxND :uint
 
-# a node function for finding direct closed tag node or nested node content
-# it's just a header having a literal tag fed into the recursive node search function inside
-proc node( str:string; res :var string; tag="") :bool=
-  var tot, max, d :uint
-  proc nodeNoT( str :string; res :var string; tag="") :bool=
-    let m= str.find( re(
-       "(?xs) ^<(" & tag & r"[a-z]\w*+) (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" ))
+template nodeCo( tot, max, d :uint) :bool=
     if m.isNone: return false
     let g=m.get.captures.toSeq
     tot.inc; d.inc; if d>max: max=d
@@ -38,9 +32,10 @@ proc node( str:string; res :var string; tag="") :bool=
       str = g[3].get()
     if g[1].isSome:
       res= off & g[1].get()
-      if tag != "":
-       totN=tot; maxND=max
+      dec(d)
+      if d==0:
        remain= str
+       totN=tot; maxND=max
       return true
     off &= g[2].get()
     while true:
@@ -53,8 +48,8 @@ proc node( str:string; res :var string; tag="") :bool=
           res= off & "</" & tagname
           dec(d)
           if d==0:
-            totN=tot; maxND=max
             remain= str[ 2+tagname.len..^1]
+            totN=tot; maxND=max
           return true
         else: break
       elif nodeNoT( str, res):
@@ -62,7 +57,22 @@ proc node( str:string; res :var string; tag="") :bool=
         str= str[ res.len..^1]
       else: break
     false
-  nodeNoT str, res, tag
+# a node function for finding direct closed tag node or nested node content
+# the 2 are just header with no and a literal tag fed into the recursive node search function inside
+
+proc node( str, res :string) :bool=
+ var tot, max, d :uint
+ proc nodeNoT( str, res :string) :bool=
+  let m= str.find( re"(?xs) ^<([a-z]\w*+) (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" )
+  nodeCo tot, max, d
+ nodeNoT str, res
+
+proc node( str, res, tag :string) :bool=
+ var tot, max, d :uint
+ proc nodeNoT( str, res :string; tag="") :bool=
+  let m= str.find( re("(?xs) ^<(" & tag & r"[a-z]\w*+) (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" ))
+  nodeCo tot, max, d
+ nodeNoT str, res, tag
 
 template ctntNode( remainstr, tag, resNoffset :untyped) :bool=
  let m {.inject.}= remainstr.find(re(
@@ -73,9 +83,9 @@ template ctntNode( remainstr, tag, resNoffset :untyped) :bool=
   remainstr = m.get.captures[5]
   true
 
-template ctnoTagNode( remains, tag :string) :bool= ctntNode( remains, tag) :discard
+template ctnoTagNode( remains, tag :string) :bool= ctntNode remains, tag :discard
 template ctnoTagNode( remains, tag, res :string) :bool=
- ctntNode( remains, tag) :
+ ctntNode remains, tag :
   offset= m.get.captures[0]
   res= m.get.captures[3]
 
@@ -90,19 +100,23 @@ macro ctnPrevTag( nd :seq[array[2,string]]; res :string; nodeExists:untyped) =
     offset &= `res`
    else: break
 
-template ctnUp2Tag( nd :seq[ array[2,string]]; res, notTag, tag :string; xPathSpecmd:untyped) =
+template ctnUp2Tag( nd :seq[ array[2,string]]; res, notTag, tag :string; xPCmd:untyped) =
  ctnPrevTag nd, res:
   node remain, res, notTag
  if node( remain, res, tag):
   if maxND > mindepth: nd.add( [offset, res])
-  xPathSpecmd
+  xPCmd
   offset &= res
  else: break
 
 template headeRemain( nd :string; prevOff="")=
  var m=nd.find(head)
- offset= prevOff & m.get.captures[0]
  remain= m.get.captures[1]
+ offset= prevOff & m.get.captures[0]
+template headeRemOff( nd :string; prevOff="") :string=
+ var m=nd.find(head)
+ remain= m.get.captures[1]
+ prevOff & m.get.captures[0]
 
 const
  isERROR = true
@@ -110,9 +124,9 @@ const
 
 template abPosN( posn :string) =
  var
-  g= posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
+  g = posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
   eq= g[1].isSome
-  n= g[2].get().strUint       # Get a b as lower-upper bound number
+  n = g[2].get().strUint       # Get a b as lower-upper bound number
  if g[0].isSome:
   b= if eq: n else: n-1
  else:   a = if eq: n-1 else: n
@@ -125,12 +139,14 @@ macro getNthRev( tag :string; n :uint) :bool=
   while ctnoTagNode( remn, `tag`): i.inc
   if i < `n`: false
   else:
-   `n` = 1+i-`n`              # i as max from which nth is subtracted
+   `n` = 1+i-`n`       # i as max from which nth is subtracted
    true
 
 template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; nth:uint; nthRev:bool) :bool=
- var n=nth
- nod.headeRemain
+ var
+  headOff :string
+  n=nth
+ headOff= nod.headeRemOff(nodOffset)
  if nthRev and not getNthRev( tag, n): isERROR
  else:
   let m = remain.find(re(
@@ -138,12 +154,12 @@ template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; nth:u
   if m.isNone: isERROR
   else:
    var r = m.get.captures[3]
-   ret.add( [nodOffset & offset & m.get.captures[0][0..^r.len+1], r])
+   ret.add( [headOff & offset & m.get.captures[0][0..^r.len+1], r])
    isSUCCED
 
 proc getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; tag, posn, att, aatt :string="") :bool=
-  var res :string
-  nod.headeRemain(nodOffset)
+  var headOff, res :string
+  headOff= nod.headeRemOff(nodOffset)
   if tag != "":
    var
     a, b, i :uint
@@ -155,20 +171,20 @@ proc getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; tag, po
     if ctnoTagNode( remain, tag, res):
      i.inc
      if i > a and (b==0 or i <= b):
-      ret.add( [offset, res])
+      ret.add( [headOff & offset, res])
      offset &= res
     else: break
   elif aatt != "":
    var tag= r"\S+\s+" & aatt
    while true:
     if ctnoTagNode( remain, tag, res):
-     ret.add( [offset, res])
+     ret.add( [headOff & offset, res])
      offset &= res
     else: break
   else:
    while true:
     if ctnoTagNode( remain, tag, res):
-      ret.add( [offset, res])
+      ret.add( [headOff & offset, res])
       offset &= res
     else: break
   ret.len==0
@@ -205,8 +221,7 @@ proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod, tag :stri
 proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; mindepth :uint; tag, posn, att, aatt ="") :bool=
  var nd, curNode = newSeqOfCap[ array[ 2, string]](avgNumNdPly)
  curNode.add( [nodOffset, nod])
-
- template loop( foundCmd)=
+ template loop( foundCmd :untyped)=
   while curNode.len > 0:
    for o_n in curNode:
     o_n[1].headeRemain(o_n[0])
@@ -219,11 +234,9 @@ proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; m
    a, b, i :uint
    notTag = "(?!" & tag & r"\b"
    tag = "(?=" & tag & r"\b"
-  if posn != "":
-   abPosN posn
+  if posn != "": abPosN posn
   elif att != "":
-   notTag &= r"\s+" & att
-   tag &= r"\s+" & att
+   notTag &= r"\s+" & att; tag &= r"\s+" & att
   notTag &= ")"; tag &= ")"
   loop:
    i.inc
@@ -235,72 +248,69 @@ proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; m
    tag= r"(?=\S+\s+" & aatt & ")"
   loop:
    if maxND >= mindepth: ret.add( [offset, res])
-
  ret.len==0
-
-
 
 var resultArr :seq[ array[ 2,string]]
 proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
-  var
-    g= path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\)(?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
-    nth :uint
-    tag, posn, attg, aatt :string
-    anyNode :bool
-    remPath = g[8].get()
-    isAllDepths = g[0].isSome
-    isTag = g[1].isSome
-    nthRev = g[2].isSome
-    isNth = g[3].isSome
-    isPosn = g[4].isSome
-    isAttg = g[5].isSome
-    isAatt = g[6].isSome
-  if isTag:
-    tag = g[1].get()
-    if isNth:
-      nth = g[3].get().strUint()
-    elif isPosn:
-      posn = g[4].get()
-    elif isAttg:
-      attg = g[5].get()
-  elif isAatt:
-    aatt = g[6].get()
-  else:
-    anyNode = true       # * for any tag name
-  var
-   remDepth = 1 + numChr('/', remPath)
-   retOffNode= newSeqOfCap[ array[ 2,string]](avgNumNdPly)       # the will-be offset-node result
-  for i, u in offsetNode:
-   if
-    if isAllDepths:                     # all depths under current //
-     if isTag:
-      if isNth:
-       getAllDepthMultiN retOffNode, u[0], u[1], tag, remDepth, nth, nthRev   # retOffNode is offset-node found..
-      else:
-       getAllDepthMultiN retOffNode, u[0], u[1], remDepth, tag, posn, attg
-     elif isAatt:
-      false#getAllDepthMultiN retOffNode, u[0], u[1], remDepth, tag, att=attg
-     else:
-      false #getAllDepthMultiN retOffNode, u[0], u[1], aatt, remDepth
-    elif isTag:
+ var
+   g= path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\)(?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
+   nth :uint
+   tag, posn, attg, aatt :string
+   #anyNode :bool
+   remPath = g[8].get()
+   isAllDepths = g[0].isSome
+   isTag = g[1].isSome
+   nthRev = g[2].isSome
+   isNth = g[3].isSome
+   isPosn = g[4].isSome
+   isAttg = g[5].isSome
+   isAatt = g[6].isSome
+ if isTag:
+   tag = g[1].get()
+   if isNth:
+     nth = g[3].get().strUint()
+   elif isPosn:
+     posn = g[4].get()
+   elif isAttg:
+     attg = g[5].get()
+ elif isAatt:
+   aatt = g[6].get()
+ #else:
+   #anyNode = true       # * for any tag name
+ var
+  remDepth = 1 + numChr('/', remPath)
+  retOffNode= newSeqOfCap[ array[ 2,string]](avgNumNdPly) # retOffNode = will-be offset-node found...
+ for i, u in offsetNode:
+  if
+   if isAllDepths:                     # all depths under current //
+    if isTag:
      if isNth:
-      getE_Nth( retOffNode, u[0], u[1], tag, nth, nthRev)
+      getAllDepthMultiN retOffNode, u[0], u[1], tag, remDepth, nth, nthRev
      else:
-      getE_MultiN( retOffNode, u[0], u[1], tag, posn, att= attg)
+      getAllDepthMultiN retOffNode, u[0], u[1], remDepth, tag, posn, attg
     elif isAatt:
-     getE_MultiN( retOffNode, u[0], u[1], aatt= aatt)
-    else:       # allNode:
-     getE_MultiN( retOffNode, u[0], u[1])             # be any of these true, it failed finding, so
-    :
-     if i < offsetNode.high: continue        # see, if it's not the last in loop, go on iterating
-     return resultArr.len==0                 # otherwise return true (1) if finding none or 0 if finding any
-   if remPath.len > 0:
-    let e = getE_Path_R( remPath, retOffNode)       #...which will always propagate to the next whose
-    if i==offsetNode.high : return e              # boolean result is return if this is the last iteration
-   else:
-    resultArr.add( retOffNode)
-   retOffNode.reset
-  isSUCCED
+     false#getAllDepthMultiN retOffNode, u[0], u[1], remDepth, tag, att=attg
+    else:
+     false #getAllDepthMultiN retOffNode, u[0], u[1], aatt, remDepth
+   elif isTag:
+    if isNth:
+     getE_Nth( retOffNode, u[0], u[1], tag, nth, nthRev)
+    else:
+     getE_MultiN( retOffNode, u[0], u[1], tag, posn, att= attg)
+   elif isAatt:
+    getE_MultiN( retOffNode, u[0], u[1], aatt= aatt)
+   else:       # allNode:
+    getE_MultiN( retOffNode, u[0], u[1])             # be any of these true, it failed finding, so
+   :
+    if i < offsetNode.high: continue        # see, if it's not the last in loop, go on iterating
+    return resultArr.len==0                 # otherwise return true (1) if finding none or 0 if finding any
+  if remPath.len > 0:
+   let e = getE_Path_R( remPath, retOffNode)      #...which will always propagate to the next, whose
+   if i==offsetNode.high : return e              # boolean result is return if this is the last iteration
+  else:
+   resultArr.add( retOffNode)
+  retOffNode.reset
+ isSUCCED
 
 var             ###   main   ##
  valPaths :seq[ string]
@@ -355,15 +365,15 @@ else:
   echo "\n'",file,"' doesn't exist\n";quit(0)
 echo "\nChecking HTML document '",file,"'... "
 
-let                  # Validating ML format:
- m= whole.find(re(
-   r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" ))
+# Validating ML format:
+let m= whole.find(re(
+ r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" ))
 
 if m.isNone or not node( m.get.captures[3], restr) or
  (let r=remain.replace(re"^\s|\s$",""); r).len > 0 and
   not r.contains(re("(" & nodRE & r"\s*)*")):
-   echo "\ncan't parse it due to ill-form or unbalanced tag pair mark-up language\nAborting";quit(0)
-
+   echo "\ncan't parse it due to ill-form or unbalanced tag pair mark-up language\nAborting"
+   quit(0)
 let maxFouND = (totN.float * 2 / 3).uint
 var
  innd= @[ [m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"] ]
@@ -383,7 +393,6 @@ for u in valPaths:
   if fail:
    echo "\nSkip it to process the next path? (Y/Enter: yes. any else: Abort) "
    if getch() == 'y': echo "Aborting\n";quit(0)
-  resultArr = @[]
   fail = getE_Path_R( u, innd)
   if fail:
    miss.add(u); echo "\nCan't find: ",u
@@ -394,6 +403,7 @@ for u in valPaths:
      if u.contains(re(r"^\Q" & s & r"\E")) : break F
     fpath.add(resultArr)
    short.add(u)
+  resultArr.reset
 
 if miss.len > 0:
   if path.len > 0:
@@ -421,9 +431,8 @@ case op:
  of 'r':
   fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
   for on in fpath:
-    whole= whole.replace(re(r"\A(\Q" & on[0] & r"\E)\Q" & on[1] & r"\E(.*)\Z"), "$1$2")
-  echo "\nRemoval result:\n", whole
-
+   #whole= whole.replace(re(r"(?s)^(\Q" & on[0] & r"\E)\Q" & on[1] & r"\E(.*)"), "$1$2")
+  #echo "\nRemoval result:\n", whole
  else:
   whole = ""
   for i in path :
