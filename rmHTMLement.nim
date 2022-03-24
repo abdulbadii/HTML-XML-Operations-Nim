@@ -116,7 +116,7 @@ template headeRemain( nd :string; prevOff="")=
 
 const
  isERROR = true
- isSUCCED = false
+ isSUCCEED = false
 
 template abPosN( posn :string )=
  var
@@ -146,7 +146,7 @@ template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; nth:u
   else:
    var r = m.get.captures[3]
    ret.add [offset & m.get.captures[0][0..^r.len+1], r]
-   isSUCCED
+   isSUCCEED
 
 proc getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; tag, posn, att, aatt :string="") :bool=
   nod.headeRemain nodOffset
@@ -300,7 +300,7 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
   else:
    resultArr.add retOffNode
   retOffNode.reset
- isSUCCED
+ isSUCCEED
 
 var             ###   main   ##
  valPaths :seq[ string]
@@ -350,7 +350,9 @@ if fileExists(file):
   try:
     whole = readFile file
   except IOError as e:
-    echo "\nCannot open '",file,"': ",e.msg
+    echo "\nCannot read '",file,"': ",e.msg
+  except:
+    echo "\nCannot read '",file,"': unidentified error"
 else:
   echo "\n'",file,"' doesn't exist\n";quit(0)
 echo "\nChecking HTML document '",file,"'... "
@@ -359,7 +361,7 @@ echo "\nChecking HTML document '",file,"'... "
 let m= whole.find re(
  r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" )
 
-if m.isNone or not node( m.get.captures[3], restr) or
+if m.isNone or not node( m.get.captures[3]) or
  (let r=remain.replace(re"^\s|\s$",""); r).len > 0 and
   not r.contains(re("(" & nodRE & r"\s*)*")):
    echo "\ncan't parse it due to ill-form or unbalanced tag pair mark-up language\nAborting"
@@ -368,8 +370,9 @@ let maxFouND = (totN.float * 2 / 3).uint
 var
  innd= @[ [m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"] ]
  path = newSeqOfCap[ ( string, seq[ array[ 2, string] ]) ](valPaths.len)
- miss, short = newSeqOfCap[ string ](valPaths.len)
- fpath = newSeqOfCap[ array[ 2, string] ](maxFouND)
+ miss = newSeqOfCap[ string ](valPaths.len)
+ fpath= newSeqOfCap[ array[ 2, string] ](maxFouND)
+ short: seq[ string]
  fail :bool
  op :char
  maxw= whole.len-17
@@ -389,20 +392,20 @@ for u in valPaths:
    if getch() == 'y': echo "Aborting\n";quit(0)
   fail = getE_Path_R( u, innd)
   if fail:
-   miss.add(u); echo "\nCan't find: ",u
+   miss.add u; echo "\nCan't find: ",u
   else:
-   path.add( (u, resultArr) )
+   path.add (u, resultArr)
    block F:
     for s in short:   # filter out duplicate path or path whose head as the same as shorter one's
      if u.contains(re(r"^\Q" & s & r"\E")) : break F
     fpath.add(resultArr)
-   short.add(u)
+   short.add u
   resultArr.reset
 if miss.len > 0:
   if path.len > 0:
     echo "\nKeep processing ones found? (Enter/y: yes. Any else: Abort) "
-    y=getch();if y != 'y': echo "Aborting"
-  else: echo "\nNothing was done";quit(0)
+    y=getch();if y != 'y': quit("\nAborting",0)
+  else: quit("\nNothing was done",0)
 
 if cmdLine.len==0:
   echo "\n\nWhich operation will be done :\n- Remove\n- Extract\n(R: remove. Else key: extract) "
