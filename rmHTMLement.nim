@@ -96,7 +96,7 @@ macro ctnPrevTag( nd :seq[array[2,string]]; isNodeOfTag:untyped) =
    offset &= m.get.captures[0]
    remain = m.get.captures[1]
    if `isNodeOfTag`:
-    if maxND > mindepth: `nd`.add( [offset, res])
+    if maxND > mindepth: `nd`.add [offset, res]
     offset &= res
    else: break
 
@@ -104,7 +104,7 @@ template ctnUp2Tag( nd :seq[ array[2,string]]; notTag, tag :string; xPCmd:untype
  ctnPrevTag nd:
   node remain, notTag
  if node( remain, tag):
-  if maxND > mindepth: nd.add( [offset, res])
+  if maxND > mindepth: nd.add [offset, res]
   xPCmd
   offset &= res
  else: break
@@ -284,13 +284,13 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
      getAllDepthMultiN retOffNode, u[0], u[1], remDepth
    elif isTag:
     if isNth:
-     getE_Nth( retOffNode, u[0], u[1], tag, nth, nthRev)
+     getE_Nth retOffNode, u[0], u[1], tag, nth, nthRev
     else:
-     getE_MultiN( retOffNode, u[0], u[1], tag, posn, att= attg)
+     getE_MultiN retOffNode, u[0], u[1], tag, posn, att= attg
    elif isAatt:
-    getE_MultiN( retOffNode, u[0], u[1], aatt= aatt)
+    getE_MultiN retOffNode, u[0], u[1], aatt= aatt
    else:
-    getE_MultiN( retOffNode, u[0], u[1])      # any node. Be any of these true, it failed finding, so
+    getE_MultiN retOffNode, u[0], u[1]      # any node. Be any of these true, it failed finding, so
    :
     if i < offsetNode.high: continue        # see, if it's not the last in loop, go on iterating
     return resultArr.len==0              # otherwise return true (1) if finding none or 0 if finding any
@@ -320,7 +320,7 @@ let (pathStr, file) = if cmdLine.len > 0:
   (cmdLine[2], cmdLine[3])
 else:
   echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |\nPut in two data, Element path and HTML/XML file name:\n"
-   (readLine(stdin), readLine(stdin)) 
+  (readLine(stdin), readLine(stdin)) 
 if pathStr.len==0: echo "\nNo Xpath given";quit(0)
 
 let xpath=
