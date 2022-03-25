@@ -129,7 +129,7 @@ template abPosN( posn :string )=
 
 proc getNthRev( tag :string; n :var uint) :bool=
  var i :uint
- res= remain   # make use of global res, preserve remain
+ res= remain       # make use of global res, preserve remain
  while ctnoTagNode_Remain( res, tag): i.inc
  if i<n: return false
  n = 1+i-n       # i is max from which subtract n
@@ -168,7 +168,7 @@ proc getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; tag, po
    var tag= r"\S+\s+" & aatt
    while true:
     if ctnoTagNode( tag):
-     ret.add( [offset, res])
+     ret.add [offset, res]
      offset &= res
     else: break
   else:
@@ -186,7 +186,7 @@ proc getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string;
   n=nth
   curNode, nd= newSeqOfCap[ array[ 2, string]](avgNumNdPly)
  curNode.add [nodOffset, nod]
- template loopCondPar( cond :untyped )=
+ template loopCondPara( cond :untyped )=
   while curNode.len > 0:
    for o_n in curNode:
     o_n[1].headeRemain o_n[0]
@@ -202,10 +202,10 @@ proc getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string;
      node remain, res
    curNode= nd; nd.reset
  if nthRev:
-  loopCondPar:
+  loopCondPara:
    if getNthRev( tag, n) : discard
  else:
-  loopCondPar: discard
+  loopCondPara: discard
  ret.len==0
 
 proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; mindepth :uint; tag, posn, att, aatt ="") :bool=
@@ -240,14 +240,16 @@ proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; m
    if maxND >= mindepth: ret.add [offset, res]
  ret.len==0
 
-var resultArr :seq[ array[ 2,string]]
-proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
+var
+ resultArr :seq[ array[ 2,string]]
+ maxw :uint
+proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
  var
    g= path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\)(?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
    nth :uint
    tag, posn, attg, aatt :string
    #anyNode :bool
-   remPath = g[8].get()
+   remPath = g[8].get
    isAllDepths = g[0].isSome
    isTag = g[1].isSome
    nthRev = g[2].isSome
@@ -268,8 +270,11 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
  #else:
    #anyNode = true       # * for any tag name
  var
-  remDepth = 1 + numChr( '/', remPath)
-  retOffNode= newSeqOfCap[ array[ 2,string]](avgNumNdPly) # retOffNode = will-be offset-node found...
+  remDepth = 1+numChr( '/', remPath)
+  retOffNode= newSeqOfCap[ array[ 2,string]](avgNumNdPly)   # retOffNode would be offset-node found...
+ for _ in 1..avgNumNdPly:
+  retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
+ retOffNode.reset
  for i, u in offsetNode:
   if
    if isAllDepths:                     # all depths under current //
@@ -290,10 +295,10 @@ proc getE_Path_R( path :string, offsetNode :seq[ array[2,string]]) :bool=
    elif isAatt:
     getE_MultiN retOffNode, u[0], u[1], aatt= aatt
    else:
-    getE_MultiN retOffNode, u[0], u[1]      # any node. Be any of these true, it failed finding, so
+    getE_MultiN retOffNode, u[0], u[1]      # any node. Be any of these true, it failed finding, now
    :
-    if i<offsetNode.high: continue        # see, if it's not the last in loop, go on iterating
-    return resultArr.len==0              # otherwise return true (1) if finding none or 0 if finding any
+    if i<offsetNode.high: continue     # see: if it's not the last in loop, go on iterating, otherwise
+    return resultArr.len==0              # return true (1) if finding none or false if finding any
   if remPath.len > 0:
    let e = getE_Path_R( remPath, retOffNode)      #...which will always propagate to the next, whose
    if i==offsetNode.high : return e              # boolean result is return if this is the last iteration
@@ -308,8 +313,8 @@ var             ###   main   ##
  y :char
  whole, p, aCP, restr, outf :string
 
-let (pathStr, file) = if cmdLine.len > 0:   # This block is expected being wrong and need fix by someone
-  echo "\nTry to accomplish:"
+let (pathStr, file) = if cmdLine.len > 0:   # This block is expectedly wrong and need a knowledgable one
+  echo "\nTry to accomplish:"               # to colloborate the work to fixing
   for i,l in cmdLine:
    echo i,". ",l
   quit(0)
@@ -369,14 +374,14 @@ if m.isNone or not node( m.get.captures[3]) or
 let maxFouND = (totN.float * 2 / 3).uint
 var
  numPath= valPaths.len.uint
- innd= @[ [m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"] ]
+ iNode = @[ [m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"] ]
  path = newSeqOfCap[ ( string, seq[ array[ 2, string]]) ](numPath)
  fpath= newSeqOfCap[ array[ 2, string] ](maxFouND)
  miss = newSeqOfCap[ string ](numPath)
  short= newSeqOfCap[ string ](numPath)
  fail :bool
  op :char
- maxw= whole.len-17
+maxw= (whole.len-17).uint
 offset = newStringOfCap(maxw)
 remain = newStringOfCap(maxw)
 res = newStringOfCap(maxw)
@@ -388,23 +393,24 @@ for _ in 1..numPath:
  path.add (newStringOfCap(73), fpath)
  fpath.reset
 path.reset
-resultArr = newSeqOfCap[ array[ 2,string] ](maxFouND)
+
+resultArr= newSeqOfCap[ array[ 2,string] ](maxFouND)
 for _ in 1..maxFouND:
   resultArr.add [newStringOfCap(maxw), newStringOfCap(maxw)]
 
-valPaths.sort( proc( a,b:string) :int =cmp(a.len, b.len) )
+valPaths.sort( proc( a,b :string) :int= cmp(a.len, b.len) )
 for u in valPaths:
   if fail:
    echo "\nSkip it to process the next path? (Y/Enter: yes. any else: Abort) "
    if getch() == 'y': echo "Aborting\n";quit(0)
   resultArr.reset
-  fail = getE_Path_R( u, innd)
+  fail = getE_Path_R( u, iNode)
   if fail:
    miss.add u; echo "\nCan't find: ",u
   else:
    path.add (u, resultArr)
-   block F:
-    for s in short:   # filter out duplicate path or path whose head as the same as shorter one's
+   block F:     # filter out duplicate path or path whose head as the same as shorter one's
+    for s in short:
      if u.contains(re(r"^\Q" & s & r"\E")) : break F
     fpath.add(resultArr)
    short.add u
