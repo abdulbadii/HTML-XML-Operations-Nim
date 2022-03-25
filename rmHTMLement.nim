@@ -355,7 +355,7 @@ if fileExists(file):
     echo "\nCannot read '",file,"': unidentified error"
 else:
   echo "\n'",file,"' doesn't exist\n";quit(0)
-echo "\nChecking HTML document '",file,"'... "
+echo "\nChecking document '",file,"'... "
 
 # Validating ML format:
 let m= whole.find re(
@@ -368,28 +368,36 @@ if m.isNone or not node( m.get.captures[3]) or
    quit(0)
 let maxFouND = (totN.float * 2 / 3).uint
 var
+ numPath= valPaths.len.uint
  innd= @[ [m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"] ]
- path = newSeqOfCap[ ( string, seq[ array[ 2, string] ]) ](valPaths.len)
- miss = newSeqOfCap[ string ](valPaths.len)
+ path = newSeqOfCap[ ( string, seq[ array[ 2, string]]) ](numPath)
  fpath= newSeqOfCap[ array[ 2, string] ](maxFouND)
- short: seq[ string]
+ miss = newSeqOfCap[ string ](numPath)
+ short= newSeqOfCap[ string ](numPath)
  fail :bool
  op :char
  maxw= whole.len-17
 offset = newStringOfCap(maxw)
-res = newStringOfCap(maxw)
 remain = newStringOfCap(maxw)
+res = newStringOfCap(maxw)
 avgNumNdPly = (totN.float / maxND.float * 1.3).uint
+
+for _ in 1..numPath:
+ for _ in 1..maxFouND:
+   fpath.add [newStringOfCap(maxw), newStringOfCap(maxw)]
+ path.add (newStringOfCap(73), fpath)
+ fpath.reset
+path.reset
 resultArr = newSeqOfCap[ array[ 2,string] ](maxFouND)
 for _ in 1..maxFouND:
   resultArr.add [newStringOfCap(maxw), newStringOfCap(maxw)]
-resultArr.reset
 
 valPaths.sort( proc( a,b:string) :int =cmp(a.len, b.len) )
 for u in valPaths:
   if fail:
    echo "\nSkip it to process the next path? (Y/Enter: yes. any else: Abort) "
    if getch() == 'y': echo "Aborting\n";quit(0)
+  resultArr.reset
   fail = getE_Path_R( u, innd)
   if fail:
    miss.add u; echo "\nCan't find: ",u
@@ -400,7 +408,6 @@ for u in valPaths:
      if u.contains(re(r"^\Q" & s & r"\E")) : break F
     fpath.add(resultArr)
    short.add u
-  resultArr.reset
 if miss.len > 0:
   if path.len > 0:
     echo "\nKeep processing ones found? (Enter/y: yes. Any else: Abort) "
