@@ -96,7 +96,7 @@ macro ctnPrevTag( nd :seq[array[2,string]]; isNodeOfTag:untyped) =
    offset &= m.get.captures[0]
    remain = m.get.captures[1]
    if `isNodeOfTag`:
-    if maxND > mindepth: `nd`.add [offset, res]
+    if maxND > minD: `nd`.add [offset, res]
     offset &= res
    else: break
 
@@ -104,7 +104,7 @@ template ctnUp2Tag( nd :seq[ array[2,string]]; notTag, tag :string; xSpeCmd:unty
  ctnPrevTag nd:
   node remain, notTag
  if node( remain, tag):
-  if maxND > mindepth: nd.add [offset, res]
+  if maxND > minD: nd.add [offset, res]
   xSpeCmd
   offset &= res
  else: break
@@ -184,8 +184,10 @@ template getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string) :bo
   else: break
  ret.len==0
 
-proc getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; mindepth, nth :uint; nthRev:bool, numOffNod :uint) :bool=
+proc getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; minD, nth :uint; nthRev:bool, numOffNod :uint) :bool=
  template loopCondPara( cond :untyped )=
+  var curNode, nd= newSeqOfCap[ array[ 2, string]](numOffNod)
+  curNode.add [nodOffset, nod]
   while curNode.len > 0:
    for o_n in curNode:
     o_n[1].headeRemain o_n[0]
@@ -196,14 +198,11 @@ proc getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string;
       tag = "(?=" & tag & r"\b)"
      for i in 1..n:
       ctnUp2Tag nd, notTag, tag :
-       if i==n and maxND >= mindepth: ret.add [offset, res]
+       if i==n and maxND >= minD: ret.add [offset, res]
     ctnPrevTag nd:
      node remain, res
    curNode= nd; nd.reset
- var
-  n=nth
-  curNode, nd= newSeqOfCap[ array[ 2, string]](numOffNod)
- curNode.add [nodOffset, nod]
+ var n=nth
  if nthRev:
   loopCondPara:
    if getNthRev( tag, n) : discard
@@ -214,23 +213,23 @@ var
  maxw :uint
  resultArr :seq[ array[ 2,string]]
 
-proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; mindepth :uint; tag, posn, att, aatt ="", numOffNod :uint) :bool=
- template loop( foundCmd :untyped )=
-  while curNode.len > 0:
-   for o_n in curNode:
-    var i {.inject.} :uint
-    o_n[1].headeRemain o_n[0]
-    while true:
-     ctnUp2Tag nd, notTag, tag:
-      foundCmd
-   curNode=nd; nd.reset
-
+template AllDeploop( foundCmd :untyped)=
  var nd, curNode = newSeqOfCap[ array[ 2, string]](numOffNod)
  for _ in 1..numOffNod:
   nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
   curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  curNode.reset; nd.reset
  curNode.add [nodOffset, nod]
+ while curNode.len > 0:
+  for o_n in curNode:
+   var i {.inject.} :uint
+   o_n[1].headeRemain o_n[0]
+   while true:
+    ctnUp2Tag nd, notTag, tag:
+     foundCmd
+  curNode=nd; nd.reset
+
+proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; minD :uint; tag, posn, att, aatt ="", numOffNod :uint) :bool=
  if tag != "":
   var
    a, b :uint
@@ -240,16 +239,24 @@ proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; m
   elif att != "":
    notTag &= r"\s+" & att; tag &= r"\s+" & att
   notTag &= ")"; tag &= ")"
-  loop:
+  AllDeploop:
    i.inc
-   if i>a and (b==0 or i<=b) and maxND >= mindepth:
+   if i>a and (b==0 or i<=b) and maxND >= minD:
     ret.add [offset, res]
- elif aatt != "":
-  var
-   notTag= r"(?!\S+\s+" & aatt & ")"
-   tag= r"(?=\S+\s+" & aatt & ")"
-  loop:
-   if maxND >= mindepth: ret.add [offset, res]
+ ret.len==0
+
+proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; minD :uint; aatt :string; numOffNod :uint) :bool=
+ var
+  notTag= r"(?!\S+\s+" & aatt & ")"
+  tag= r"(?=\S+\s+" & aatt & ")"
+ AllDeploop:
+  if maxND >= minD: ret.add [offset, res]
+ ret.len==0
+
+proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; minD, numOffNod :uint) :bool=
+ var notTag, tag = ""
+ AllDeploop:
+  if maxND >= minD: ret.add [offset, res]
  ret.len==0
 
 proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
@@ -294,9 +301,9 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
      else:
       getAllDepthMultiN retOffNode, u[0], u[1], remDepth, tag, posn, attg, numOffNod=avgOffNodeInPly
     elif isAatt:
-     getAllDepthMultiN retOffNode, u[0], u[1], remDepth, aatt=aatt, numOffNod=avgOffNodeInPly
+     getAllDepthMultiN retOffNode, u[0], u[1], remDepth, aatt, avgOffNodeInPly
     else:
-     getAllDepthMultiN retOffNode, u[0], u[1], remDepth, numOffNod=avgOffNodeInPly
+     getAllDepthMultiN retOffNode, u[0], u[1], remDepth, avgOffNodeInPly
    elif isTag:
     if isNth:
      getE_Nth retOffNode, u[0], u[1], tag, nth, nthRev
