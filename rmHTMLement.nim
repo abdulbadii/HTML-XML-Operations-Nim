@@ -89,13 +89,13 @@ template ctnoTagNode( tag :string) :bool=
   offset &= m.get.captures[0]
   res= m.get.captures[3]
 
-macro ctnPrevTag( nd :seq[array[2,string]]; isNodeOfTag:untyped) =
+macro ctnPrevTag( nd :seq[array[2,string]]; isTheTagNode:untyped) =
  result = quote do:
   while true:
    let m = remain.find aCtn
    offset &= m.get.captures[0]
    remain = m.get.captures[1]
-   if `isNodeOfTag`:
+   if `isTheTagNode`:
     if maxND > minD: `nd`.add [offset, res]
     offset &= res
    else: break
@@ -109,7 +109,7 @@ template ctnUp2Tag( nd :seq[ array[2,string]]; notTag, tag :string; xSpeCmd:unty
   offset &= res
  else: break
 
-template headeRemain( nd :string; prevOff="")=
+template headeRemain( nd :string, prevOff="")=
  var m = nd.find head
  offset= prevOff & m.get.captures[0]
  remain= m.get.captures[1]
@@ -132,7 +132,7 @@ proc getNthRev( tag :string; n :var uint) :bool=
  res= remain       # make use of global res, preserve remain
  while ctnoTagNode_Remain( res, tag): i.inc
  if i<n: return false
- n = 1+i-n       # i is max from which subtract n
+ n = 1+i-n          # i is max from which subtract n
  true
 
 template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; nth:uint; nthRev:bool) :bool=
@@ -185,13 +185,13 @@ template getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string) :bo
  ret.len==0
 
 proc getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; minD, nth :uint; nthRev:bool, numOffNod :uint) :bool=
- template loopCondPara( cond :untyped )=
+ template loopCondPara( if_Nth_Rev_Cond :untyped)=
   var curNode, nd= newSeqOfCap[ array[ 2, string]](numOffNod)
   curNode.add [nodOffset, nod]
   while curNode.len > 0:
    for o_n in curNode:
     o_n[1].headeRemain o_n[0]
-    cond
+    if_Nth_Rev_Cond
     block:
      let
       notTag = "(?!" & tag & r"\b)"
@@ -218,16 +218,17 @@ template AllDeploop( foundCmd :untyped)=
  for _ in 1..numOffNod:
   nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
   curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
- curNode.reset; nd.reset
+ curNode.reset
  curNode.add [nodOffset, nod]
  while curNode.len > 0:
+  nd.reset
   for o_n in curNode:
    var i {.inject.} :uint
    o_n[1].headeRemain o_n[0]
    while true:
     ctnUp2Tag nd, notTag, tag:
      foundCmd
-  curNode=nd; nd.reset
+  curNode=nd
 
 proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; minD :uint; tag, posn, att, aatt ="", numOffNod :uint) :bool=
  if tag != "":
@@ -264,7 +265,6 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
    g= path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\)(?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
    nth :uint
    tag, posn, attg, aatt :string
-   #anyNode :bool
    remPath = g[8].get
    isAllDepths = g[0].isSome
    isTag = g[1].isSome
@@ -283,8 +283,6 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
      attg = g[5].get
  elif isAatt:
    aatt = g[6].get
- #else:
-   #anyNode = true       # * for any tag name
  var
   remDepth = 1+numChr( '/', remPath)
   avgOffNodeInPly = (totN.float / maxND.float * 1.5 ).uint
@@ -327,11 +325,10 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
 var             ###   main   ##
  valPaths :seq[ string]
  cmdLine = commandLineParams()
- y :char
  whole, p, aCP, restr, outf :string
 
-let (pathStr, file) = if cmdLine.len > 0:   # This block is expectedly wrong and need a knowledgable one
-  echo "\nTry to accomplish:"               # colloboration to get it working
+let (pathStr, file)= if cmdLine.len>0:   # This block is expectedly wrong and need a knowledgable one's
+  echo "\nTry to accomplish:"          # colloboration to get it working
   for i,l in cmdLine:
    echo i,". ",l
   quit(0)
@@ -365,8 +362,8 @@ for p in pathStr.replace( re"\h+", "").split(re"[|;]"):
       valPaths.add( aCP & pr)
     else: valPaths.add( p)
   else:
-    echo "\n'",p,"' is invalid Xpath\nSkip? (s: skip. Key else: abort): "; y=getch()
-    if y != 's': echo "\nAborting";quit(1)
+    echo "\n'",p,"' is invalid Xpath\nSkip? (s: skip. Key else: abort): "
+    if getch() != 's': echo "\nAborting";quit(1)
 
 if fileExists(file):
   try:
@@ -378,14 +375,13 @@ if fileExists(file):
 else:
   echo "\n'",file,"' doesn't exist\n";quit(0)
 echo "\nChecking document '",file,"'... "
-
-# Validating ML format:
+                    # Validating ML format:
 let m= whole.find re(
  r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" )
 
-if m.isNone or not node( m.get.captures[3]) or
- (let r=remain.replace(re"^\s|\s$",""); r).len > 0 and
-  not r.contains(re("(" & nodRE & r"\s*)*")):
+if m.isNone or not m.get.captures[3].node or
+ (let r=remain.replace(re"^\s+|\s+$",""); r).len > 0 and
+  not r.contains(re("(?:" & nodRE & r"\s*)*")):
    echo "\ncan't parse it due to ill-form or unbalanced tag pair mark-up language\nAborting"
    quit(0)
 let maxFouND = (totN.float * 3 / 4).uint
@@ -402,7 +398,6 @@ maxw= (whole.len-17).uint
 offset= newStringOfCap(maxw)
 res   = newStringOfCap(maxw)
 remain= newStringOfCap(maxw)
-
 for _ in 1..numPath:
  for _ in 1..maxFouND:
    fpath.add [newStringOfCap(maxw), newStringOfCap(maxw)]
@@ -422,46 +417,46 @@ for aPath in valPaths:
   if fail:
    miss.add aPath; echo "\nCan't find: ",aPath
   else:
-   path.add (aPath, resultArr)
-   block F:        # filter out duplicate path or path whose head as the same as shorter one's
-    for s in short:
+   path.add (aPath, resultArr)       # tuple of each path's offset-node result array
+   block F:
+    for s in short:        # filter out duplicate path or path whose head as the same as shorter one's
      if aPath.contains(re(r"^\Q" & s & r"\E")) : break F
     fpath.add(resultArr)
    short.add aPath
 if miss.len > 0:
   if path.len > 0:
     echo "\nKeep processing ones found? (Enter/y: yes. Any else: Abort) "
-    y=getch();if y != 'y': quit("\nAborting",0)
+    if getch() != 'y': quit("\nAborting",0)
   else: quit("\nNothing was done",0)
 
 if cmdLine.len==0:
-  echo "\n\nWhich operation will be done :\n- Remove\n- Extract\n(R: remove. Else key: extract) "
+  echo "\n\nWhich operation will be done :"
+  echo "- Remove\n- Extract\n(R: remove. Else key: extract) "
   op=getch()
   echo "File name to save the result: (hit Enter to standard output) "
   outf=readLine(stdin).replace(re"^\h+|\s+$", "")
 
 if outf.len > 0:
-  if fileExists(outf):
-    echo "There exists file name '",outf,"'\nOverwrite it (y: Yes Else key: Abort)?"
-    y=getch();if y != 'y':
-      echo "\nWon't be overwriting it... aborting";quit(0)
+ if fileExists(outf):
+   echo "There exists file name '",outf,"'\nOverwrite it (y: Yes Else key: Abort)?"
+   if getch() != 'y': echo "\nWon't be overwriting it... aborting";quit(0)
 if path.len>1:
  echo "\nProcessing the paths:"
  for p in path:
   echo "\n",p[0]
 
 case op:
- of 'r':
-  fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
-  for on in fpath:
-   whole= whole.replace(re(r"(?s)^(\Q" & on[0] & r"\E)\Q" & on[1] & r"\E(.*)"), "$1$2")
-  echo "\nRemoval result:\n"
- else:
-  whole = ""
-  for i in path :
-    whole &= "\n" & i[0] & ":"
-    for j in i[1] :
-      whole &= "\n--------\n" & j[1]
+of 'r','R':
+ fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
+ for on in fpath:
+  whole= whole.replace(re(r"(?s)^(\Q" & on[0] & r"\E)\Q" & on[1] & r"\E(.*)"), "$1$2")
+ echo "\nRemoval result:\n"
+else:
+ whole = ""
+ for i in path :
+   whole &= "\n" & i[0] & ":"
+   for j in i[1] :
+     whole &= "\n--------\n" & j[1]
 
 if outf.len > 0:
   try: writeFile(whole, outf)
