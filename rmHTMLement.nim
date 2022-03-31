@@ -1,12 +1,11 @@
 import std/[os, terminal, nre, math, algorithm, macros]
 
-macro strUint( s :string) :uint=
- result = quote do:
-  var res :uint
-  for i, c in `s`:
-   if c in '0'..'9': res += ((ord(c) - 48) * 10^(`s`.high-i)).uint
-   else: raise newException(ValueError, "Non-number in string")
-  res
+template  strUint( s :string) :uint=
+ var res :uint
+ for i, c in s:
+  if c in '0'..'9': res += ((ord(c) - 48) * 10^(s.high-i)).uint
+  else: raise newException(ValueError, "Non-number in string")
+ res
 template numChr( c :char, s: string) :uint=
  var res :uint
  for i in s:
@@ -89,16 +88,15 @@ template ctnoTagNode( tag :string) :bool=
   offset &= m.get.captures[0]
   res= m.get.captures[3]
 
-macro ctnPrevTag( nd :seq[array[2,string]]; isTheTagNode:untyped) =
- result = quote do:
-  while true:
-   let m = remain.find aCtn
-   offset &= m.get.captures[0]
-   remain = m.get.captures[1]
-   if `isTheTagNode`:
-    if maxND > minD: `nd`.add [offset, res]
-    offset &= res
-   else: break
+template ctnPrevTag( nd :seq[array[2,string]]; isTheTagNode:untyped) =
+ while true:
+  let m = remain.find aCtn
+  offset &= m.get.captures[0]
+  remain = m.get.captures[1]
+  if isTheTagNode:
+   if maxND > minD: nd.add [offset, res]
+   offset &= res
+  else: break
 
 template ctnUp2Tag( nd :seq[ array[2,string]]; notTag, tag :string; xSpeCmd:untyped) =
  ctnPrevTag nd:
@@ -120,6 +118,7 @@ const
 
 template posiN( posn :string)=
  var
+  a {.inject.}, b {.inject.}:uint
   g = posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
   eq= g[1].isSome
   n = g[2].get.strUint       # Get a & b as lower-upper bound number
@@ -135,8 +134,7 @@ proc getNthRev( tag :string; n :var uint) :bool=
  n = 1+i-n           # i is max from which subtract n
  true
 
-template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; nth:uint; nthRev:bool) :bool=
- var n=nth
+template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; n:uint; nthRev:bool) :bool=
  nod.headeRemain nodOffset
  if nthRev and not getNthRev( tag, n): isERROR
  else:
@@ -152,7 +150,7 @@ macro getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod, tag, posn, att
  result = quote do:
   `nod`.headeRemain `nodOffset`
   var
-   a {.inject.}, b {.inject.}, i :uint
+   a,b,i :uint
    tag = `tag`
   if `posn` != "": `posn`.posiN
   elif `att` != "":
@@ -185,25 +183,29 @@ template getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string) :bo
  ret.len==0
 
 var avgOffNodeInPly :uint
-proc getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
+template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
+ var
+  curNode, nd= newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
+  notTag = "(?!" & tag & r"\b)"
+  ttag = "(?=" & tag & r"\b)"
+ for _ in 0..avgOffNodeInPly:
+  nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
+  curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
+ curNode.reset
+ curNode.add [nodOffset, nod]
  template loopH( nthRevCondition :untyped)=
    while curNode.len > 0:
+    nd.reset
     for o_n in curNode:
      o_n[1].headeRemain o_n[0]
      nthRevCondition
      ctnPrevTag nd: node()
     curNode= nd
-    nd.reset
  template loopB(n:uint)=
    for i in 1..n:
     ctnUp2Tag nd, notTag, ttag :
      if i==n and maxND >= minD:
       ret.add [offset, res]
- var
-  curNode, nd= newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
-  notTag = "(?!" & tag & r"\b)"
-  ttag = "(?=" & tag & r"\b)"
- curNode.add [nodOffset, nod]
  if nthRev:
   loopH:
    var n=nth
@@ -216,13 +218,13 @@ var
  maxw :uint
  resultArr :seq[ array[ 2,string]]
 
-template AllDepLoop( foundCmd :untyped)=
+template loop( o, n, foundCmd :untyped)=
  var nd, curNode = newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
- for _ in 1..avgOffNodeInPly:
+ for _ in 0..avgOffNodeInPly:
   nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
   curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  curNode.reset
- curNode.add [nodOffset, nod]
+ curNode.add [o, n]
  while curNode.len > 0:
   nd.reset
   for o_n in curNode:
@@ -233,48 +235,52 @@ template AllDepLoop( foundCmd :untyped)=
      foundCmd
   curNode=nd
 
-proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; minD:uint; tag:string; posn, att="") :bool=
+template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD:uint; tag:string; posn, att="") :bool=
  var
-  a, b :uint
-  notTag = "(?!" & tag & r"\b"
-  tag = "(?=" & tag & r"\b"
+  a,b:uint
+  notTag {.inject.} = "(?!" & tag & r"\b"
+  tag {.inject.} = "(?=" & tag & r"\b"
  if posn != "": posn.posiN
  elif att != "":
   notTag &= r"\s+" & att; tag &= r"\s+" & att
  notTag &= ")"; tag &= ")"
- AllDepLoop:
+ loop o, n:
   i.inc
   if i>a and (b==0 or i<=b) and maxND >= minD:
    ret.add [offset, res]
  ret.len==0
 
-proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; minD :uint; aatt :string) :bool=
+template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :uint; aatt :string) :bool=
  var
-  notTag= r"(?!\S+\s+" & aatt & ")"
-  tag= r"(?=\S+\s+" & aatt & ")"
- AllDepLoop:
+  notTag {.inject.}= r"(?!\S+\s+" & aatt & ")"
+  tag {.inject.}= r"(?=\S+\s+" & aatt & ")"
+ loop o, n:
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
 
-proc getAllDepthMultiN( ret :var seq[array[2,string]]; nodOffset, nod :string; minD :uint) :bool=
- var notTag,tag=""
- AllDeploop:
+template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :uint) :bool=
+ var notTag{.inject.},tag{.inject.}=""
+ loop o, n:
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
 
 proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
  var
-   g= path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\)(?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
-   nth :uint
-   tag, posn, attg, aatt :string
-   remPath = g[8].get
-   isAllDepths = g[0].isSome
-   isTag = g[1].isSome
-   nthRev = g[2].isSome
-   isNth = g[3].isSome
-   isPosn = g[4].isSome
-   isAttg = g[5].isSome
-   isAatt = g[6].isSome
+  g= path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\)(?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
+  nth :uint
+  tag, posn, attg, aatt :string
+  isAllDepths = g[0].isSome
+  isTag = g[1].isSome
+  nthRev = g[2].isSome
+  isNth = g[3].isSome
+  isPosn = g[4].isSome
+  isAttg = g[5].isSome
+  isAatt = g[6].isSome
+  remPath = g[8].get
+  minD= 1+numChr( '/', remPath)
+  retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNodeInPly)   # retOffNode would be offset-node found...
+ for _ in 0..avgOffNodeInPly:
+  retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  if isTag:
    tag = g[1].get
    if isNth:
@@ -285,24 +291,19 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
      attg = g[5].get
  elif isAatt:
    aatt = g[6].get
- var
-  remDepth = 1+numChr( '/', remPath)
-  retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNodeInPly)   # retOffNode would be offset-node found...
- for _ in 0..avgOffNodeInPly:
-  retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
- retOffNode.reset
  for i, u in offsetNode:
+  retOffNode.reset
   if
-   if isAllDepths:                     # all depths under current //
+   if isAllDepths:              # all depths under current //
     if isTag:
      if isNth:
-      getAllDepthNth retOffNode, u[0], u[1], tag, remDepth, nth, nthRev
+      getAllDepthNth retOffNode, u[0], u[1], tag, minD, nth, nthRev
      else:
-      getAllDepthMultiN retOffNode, u[0], u[1], remDepth, tag, posn, attg
+      getAllDepthMultiN retOffNode, u[0], u[1], minD, tag, posn, attg
     elif isAatt:
-     getAllDepthMultiN retOffNode, u[0], u[1], remDepth, aatt=aatt
+     getAllDepthMultiN retOffNode, u[0], u[1], minD, aatt=aatt
     else:
-     getAllDepthMultiN retOffNode, u[0], u[1], remDepth
+     getAllDepthMultiN retOffNode, u[0], u[1], minD
    elif isTag:
     if isNth:
      getE_Nth retOffNode, u[0], u[1], tag, nth, nthRev
@@ -311,47 +312,20 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
    elif isAatt:
     getE_MultiN retOffNode, u[0], u[1], aatt
    else:
-    getE_MultiN retOffNode, u[0], u[1]      # any node. Be any of these true, it failed finding, now
+    getE_MultiN retOffNode, u[0], u[1]     # any node. Be any of these true, it failed finding, now see
    :
-    if i<offsetNode.high: continue     # see: if it's not the last in loop, go on iterating, otherwise
+    if i<offsetNode.high: continue     # if it's not the last in loop, go on iterating, otherwise
     return resultArr.len==0              # return true (1) if finding none or false if finding any
   if remPath.len > 0:
    let e = getE_Path_R( remPath, retOffNode)      #...which will always propagate to the next, whose
    if i==offsetNode.high : return e              # boolean result is returned if this is the last iteration
   else:
    resultArr.add retOffNode
-  retOffNode.reset
  isSUCCEED
 
-var             ###   main   ##
- aCP, outf :string
- cmdLine= commandLineParams()
-
-let (pathStr, srcFile)= if cmdLine.len>0:   # This block is expectedly wrong and need a knowledgable one's
-  echo "\nTry to accomplish:"          # colloboration to correct it
-  for i,l in cmdLine:
-   echo i,". ",l
-  quit(0)
-  var
-   op = cmdLine[1]
-   l = cmdLine[0]
-  (cmdLine[2], cmdLine[3])
-else:
-  echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put in two data,\nFirst, element path(s). For copy operation, that'd be source and target ones delimited by '+>'\nSecond, the HTML/XML file name\n"
-  (readLine(stdin), readLine(stdin)) 
-if pathStr.len==0: echo "\nNo Xpath given";quit(0)
-
-let xpath=
- re"(?x) ^(?> /?/? (([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d* | position\(\)(?!<1)[<>]=? [0-9]\d* | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
-
-var
- valPaths :seq[ string]
- srdPaths= pathStr.replace(re"\h+", "").split(re"\+>")
-for _ in 0..17:
- valPaths.add newStringOfCap(41)
-
+var aCP, outf :string
 template xPathsCheck( path:string)=
- valPaths.reset
+ var paths {.inject.} :seq[ string]
  for p in path.split re"[|;]" :
    if p.contains xpath:
      if p.contains re"^[^/]" :
@@ -368,12 +342,12 @@ template xPathsCheck( path:string)=
          if aCP == "/" : echo "\n'", pr,"' upward node ..\nran over '",aCP,"' current path";quit(0)
          aCP = aCP.replace( re"[^/]+/$", "")
          pr = pr.replace( re"^../?", "")
-       valPaths.add( aCP & pr)
-     else: valPaths.add( p)
+       paths.add( aCP & pr)
+     else: paths.add( p)
    else:
      echo "\n'",p,"' is invalid Xpath\nSkip? (s: skip. else: abort): "
      if getch() != 's': echo "\nAborting";quit(1)
-srdPaths[0].xPathsCheck
+ let totPaths {.inject.}= paths.len.uint
 
 template getDocFile( f :string)=
  var whole {.inject.} :string
@@ -388,18 +362,7 @@ template getDocFile( f, w :string)=
     echo "\nCannot read '",f,"': unidentified error"
  else:
   echo "\n'",f,"' doesn't exist\n";quit(0)
- echo "\nChecking document '",f,"'... "
-
-let
- maxFouND = (totN.float * 3 / 4).uint
- numPath= valPaths.len.uint
-var
- path = newSeqOfCap[ ( string, seq[ array[ 2, string]]) ](numPath)
- miss = newSeqOfCap[ string ](numPath)
- short= newSeqOfCap[ string ](numPath)
- fpath= newSeqOfCap[ array[ 2, string] ](maxFouND)
- fail :bool
- op :char
+ echo "Checking document '",f,"'... "
 
 template validatingML( f :string)=
  var whole {.inject.} :string
@@ -414,16 +377,48 @@ template validatingML( f, w :string)=
    not r.contains(re("(?:" & nodRE & r"\s*)*")):
     echo "\ncan't parse it due to ill-form or unbalanced mark-up language tag pair\nAborting"
     quit(0)
- let iniNode {.inject.}= @[[m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"]]
+ let
+  iniNode {.inject.}= @[[m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"]]
+  maxFouND {.inject.}= (totN.float * 3 / 4).uint
+
+######   main   ######
+let
+ xpath=
+  re"(?x) ^(?> /?/? (([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d* | position\(\)(?!<1)[<>]=? [0-9]\d* | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
+ cmdLine= commandLineParams()
+ (pathStr, srcFile)= if cmdLine.len>0:    # This block expectedly error and need a knowledgable one's
+  echo "\nTry to accomplish:"             # colloboration to correct it
+  for i,l in cmdLine:
+   echo i,". ",l
+  quit(0)
+  var
+   op = cmdLine[1]
+   l = cmdLine[0]
+  (cmdLine[2], cmdLine[3])
+ else:
+   echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put in two data,\nFirst, element path(s). For copy operation, that'd be source and target ones delimited by '+>'\nSecond, the HTML/XML file name\n"
+   (readLine(stdin), readLine(stdin)) 
+if pathStr.len==0: echo "\nNo Xpath given";quit(0)
+
+var srdPaths= pathStr.replace(re"\h+", "").split(re"\+>")
+srdPaths[0].xPathsCheck
+
 srcFile.validatingML
+var
+ path = newSeqOfCap[ ( string, seq[ array[ 2, string]]) ](totPaths)
+ miss = newSeqOfCap[ string ](totPaths)
+ short= newSeqOfCap[ string ](totPaths)
+ fpath= newSeqOfCap[ array[ 2, string] ](maxFouND)
+ fail :bool
+ op :char
 
 maxw= (whole.len-17).uint       # Preallocation
 offset= newStringOfCap(maxw)
 res   = newStringOfCap(maxw)
 remain= newStringOfCap(maxw)
-for _ in 1..numPath:
+for _ in 1..totPaths:
  for _ in 1..maxFouND:
-   fpath.add [newStringOfCap(maxw), newStringOfCap(maxw)]
+  fpath.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  path.add (newStringOfCap(73), fpath)
  fpath.reset
 path.reset
@@ -431,27 +426,27 @@ for _ in 1..maxFouND:
   resultArr.add [newStringOfCap(maxw), newStringOfCap(maxw)]
 
 avgOffNodeInPly = (totN.float / maxND.float * 1.5 ).uint
-valPaths.sort( proc( a,b :string) :int= cmp(a.len, b.len) )
-for aPath in valPaths:
-  if fail:
-   echo "\nSkip it to process the next path? (Y/Enter: yes. any else: Abort) "
-   if getch() == 'y': echo "Aborting\n";quit(0)
-  resultArr.reset
-  fail= getE_Path_R( aPath, iniNode)
-  if fail:
-   miss.add aPath; echo "\nCan't find: ",aPath
-  else:
-   path.add (aPath, resultArr)       # tuple of each path's array of offset-node found
-   block F:
-    for s in short:         # filter out duplicate path or path whose head as the same as shorter one's
-     if aPath.contains(re(r"^\Q" & s & r"\E")) : break F
-    fpath.add(resultArr)
-   short.add aPath
+paths.sort( proc( a,b :string) :int= cmp(a.len, b.len) )
+for aPath in paths:
+ if fail:
+  echo "\nSkip it to process the next path? (Y/Enter: yes. any else: Abort) "
+  if getch() == 'y': echo "Aborting\n";quit(0)
+ resultArr.reset
+ fail= getE_Path_R( aPath, iniNode)
+ if fail:
+  miss.add aPath; echo "\nCan't find: ",aPath
+ else:
+  path.add (aPath, resultArr)       # tuple of each path's array of offset-node found
+  block F:
+   for s in short:         # filter out duplicate path or path whose head as the same as shorter one's
+    if aPath.contains(re(r"^\Q" & s & r"\E")): break F
+   fpath.add(resultArr)
+  short.add aPath
 if miss.len>0:
-  if path.len>0:
-    echo "\nKeep processing ones found? (Enter/y: yes. Any else: Abort) "
-    if getch() != 'y': quit("\nAborting",0)
-  else: quit("\nNothing was done",0)
+ if path.len>0:
+   echo "\nKeep processing ones found? (Enter/y: yes. Any else: Abort) "
+   if getch() != 'y': quit("\nAborting",0)
+ else: quit("\nNothing was done",0)
 
 if cmdLine.len==0:
   echo "\n\nWhich operation will be done :"
