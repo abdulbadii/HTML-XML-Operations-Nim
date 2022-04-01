@@ -183,7 +183,7 @@ template getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string) :bo
  ret.len==0
 
 var avgOffNodeInPly :uint
-template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
+template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod :string; minD:uint; tag:string; nth :uint; nthRev:bool) :bool=
  var
   curNode, nd= newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
   notTag = "(?!" & tag & r"\b)"
@@ -231,19 +231,19 @@ template loop( o, n, foundCmd :untyped)=
    var i {.inject.} :uint
    o_n[1].headeRemain o_n[0]
    while true:
-    ctnUp2Tag nd, notTag, tag:
+    ctnUp2Tag nd, notTag, theTag:
      foundCmd
   curNode=nd
 
 template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD:uint; tag:string; posn, att="") :bool=
  var
-  a,b:uint
   notTag {.inject.} = "(?!" & tag & r"\b"
-  tag {.inject.} = "(?=" & tag & r"\b"
+  theTag {.inject.} = "(?=" & tag & r"\b"
+  a,b:uint
  if posn != "": posn.posiN
  elif att != "":
-  notTag &= r"\s+" & att; tag &= r"\s+" & att
- notTag &= ")"; tag &= ")"
+  notTag &= r"\s+" & att; theTag &= r"\s+" & att
+ notTag &= ")"; theTag &= ")"
  loop o, n:
   i.inc
   if i>a and (b==0 or i<=b) and maxND >= minD:
@@ -253,13 +253,13 @@ template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD:ui
 template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :uint; aatt :string) :bool=
  var
   notTag {.inject.}= r"(?!\S+\s+" & aatt & ")"
-  tag {.inject.}= r"(?=\S+\s+" & aatt & ")"
+  theTag {.inject.}= r"(?=\S+\s+" & aatt & ")"
  loop o, n:
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
 
 template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :uint) :bool=
- var notTag{.inject.},tag{.inject.}=""
+ var notTag{.inject.},theTag{.inject.}=""
  loop o, n:
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
@@ -297,7 +297,7 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
    if isAllDepths:              # all depths under current //
     if isTag:
      if isNth:
-      getAllDepthNth retOffNode, u[0], u[1], tag, minD, nth, nthRev
+      getAllDepthNth retOffNode, u[0], u[1], minD, tag, nth, nthRev
      else:
       getAllDepthMultiN retOffNode, u[0], u[1], minD, tag, posn, attg
     elif isAatt:
