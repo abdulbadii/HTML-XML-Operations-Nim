@@ -16,8 +16,8 @@ let             # ML regexes
  nond= r"(?:[^<>]*+(?:<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+"  # no node & asymetric tag content
  aCtn= re("(?s)^(" & nond & ")(.+)")
  nodRE= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & nond & r"(?-2)?)*+</\g-1>))"
- headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
- head= re("(?s)^" & headR & "(.+)")
+ headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)(.+)"
+ head= re("(?s)^" & headR)
 var
  whole, offset, res, remain :string
  totN, maxND :uint
@@ -333,9 +333,10 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
    getE_MultiN retOffNode, u[0], u[1]     # any node. Be any of these true, it failed finding, now see
  isSUCCEED
 
-var aCP, outf :string
+var
+ aCP, outf :string
+ paths :seq[ string]
 template xPathsCheck( path:string; hasTarget="")=
- var paths {.inject.} :seq[ string]
  paths.reset
  for p in path.split re"[|;]" :
    if p.contains xpath:
@@ -383,14 +384,14 @@ template validatingML( f, w :string)=
  let m= w.find re(
   r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" )
  if m.isNone or
-  not m.get.captures[3].node or
-  (let r=remain.replace(re"^\s+|\s+$",""); r).len>0 and
-   not r.contains(re("(?:" & nodRE & r"\s*)*")):
-    echo "\ncan't parse it due to ill-form or unbalanced mark-up language tag pair\nAborting"
-    quit(0)
- let iniNode {.inject.}= @[[m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"]]
+  not m.get.captures[3].node or (let r=remain.replace(re"^\s+|\s+$",""); r).len>0 and
+  not r.contains(re("(?:" & nodRE & r"\s*)*")):
+   echo "\nCan't parse it due to ill-form or unbalanced mark-up language tag pair\nAborting"
+   quit(0)
+ iniNode= @[[m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"]]
 
 template unsortRes( fnd:untyped)=
+ foundd=""
  for i in pathResult:
   foundd &= "\n" & i[0] & ":"
   for j{.inject.} in i[1]:
@@ -398,12 +399,11 @@ template unsortRes( fnd:untyped)=
    fnd
 template path_search_H=
  avgOffNodeInPly= (totN.float / maxND.float * 1.5 ).uint
- let maxFouND = (totN.float * 3 / 4).uint
- pathResult = newSeqOfCap[ ( string, seq[ array[ 2, string]]) ](totPaths)
+ pathResult = newSeqOfCap[ (string, seq[ array[ 2, string]]) ](totPaths)        # Preallocation
  miss = newSeqOfCap[ string ](totPaths)
- short= newSeqOfCap[ string ](totPaths)
+ let maxFouND = (totN.float * 3 / 4).uint
  fpath= newSeqOfCap[ array[ 2, string] ](maxFouND)
- maxw= (whole.len-17).uint                 # Preallocation
+ maxw= (whole.len-17).uint
  offset= newStringOfCap(maxw)
  res   = newStringOfCap(maxw)
  remain= newStringOfCap(maxw)
@@ -441,7 +441,6 @@ template path_search_B( asTarget="")=
     else: quit("\nAborting",0)
   else: quit("\nNothing was done " & asTarget,0)
  else: echo "\nEvery given path was found"
- var foundd {.inject.}:string
  if asTarget=="":
       unsortRes: founds &= j[1]
  else:unsortRes: discard
@@ -474,11 +473,12 @@ var
  pathResult :seq[ ( string, seq[ array[ 2, string]]) ]
  miss :seq[ string ]
  short :seq[ string ]
- fpath :seq[ array[ 2, string]]
+ fpath, iniNode :seq[ array[ 2, string]]
  opt :char
- founds :string
+ founds, foundd :string
 srdPaths[0].xPathsCheck
-srcFile.each_path_search
+block:                     # scope to get around no equivalent C++ delete command
+ srcFile.each_path_search  # hopefully any allocation inside getting freed by automatic Nim GC
 
 if cmdLine.len==0:
  opt= if srdPaths.len>1:'c'
@@ -513,13 +513,11 @@ of 'c','C':
    whole= whole.replace(re(
     r"(?s)^(\Q" & on[0] & r"\E)" & nodRE & "(.+)"), "$1" & founds & "$4")
  echo "\nCopying result:\n",whole
-
 of 'r','R':
  fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
  for on in fpath:
   whole= whole.replace(re(r"(?s)^(\Q" & on[0] & r"\E)\Q" & on[1] & r"\E(.*)"), "$1$2")
  echo "\nRemoval result:\n",whole
-
 else: whole=founds
 echo "Save to a file? (y: Yes, save. else key: Quit)"
 if getch()=='y':
