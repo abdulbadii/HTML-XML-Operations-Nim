@@ -16,8 +16,8 @@ let             # ML regexes
  nond= r"(?:[^<>]*+(?:<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+"  # no node & asymetric tag content
  aCtn= re("(?s)^(" & nond & ")(.+)")
  nodRE= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & nond & r"(?-2)?)*+</\g-1>))"
- headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)(.+)"
- head= re("(?s)^" & headR)
+ headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
+ head= re("(?s)^" & headR & "(.+)")
 var
  whole, offset, res, remain :string
  totN, maxND :uint
@@ -360,7 +360,7 @@ template xPathsCheck( path:string; hasTarget="")=
     echo "\n'",p,"' is invalid Xpath\nSkip? (s: skip. else: abort): "
     if getch() != 's': echo "\nAborting";quit(1)
  let totPaths {.inject.}= paths.len.uint
- if totPaths==0: quit("None of valid xpath " & hasTarget,0)
+ if totPaths==0: quit("\nNo valid xpath " & hasTarget,0)
 
 template getDocFile( f :string)=
  var whole {.inject.} :string
@@ -440,7 +440,7 @@ template path_search_B( asTarget="")=
       echo "\n",p[0]
     else: quit("\nAborting",0)
   else: quit("\nNothing was done " & asTarget,0)
- else: echo "\nEvery given path was found"
+ else: echo "Every given path was found"
  if asTarget=="":
       unsortRes: founds &= j[1]
  else:unsortRes: discard
@@ -503,15 +503,24 @@ of 'c','C':
   path_search_B: "to copying"
   echo "Every copy target element found:\n",foundd
  fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
- echo "Should source element copy be under target element or replacing\n(u: Under it. else key: Replacing it)"
- if getch()=='u':
+ echo "Should source element be under target element, replacing, preceding, or following it?\n(u: Under it. r: Replacing it. p: Preceding it. else key: Following it)"
+ case getch()
+ of 'u','U':
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^(\Q" & on[0] & r"\E)" & headR), "$1$2" & founds & "$3")
- else:
+    r"(?s)^(\Q" & on[0] & r"\E)" & headR), "$1$2" & founds)
+ of 'r','R':
   for on in fpath:
    whole= whole.replace(re(
     r"(?s)^(\Q" & on[0] & r"\E)" & nodRE & "(.+)"), "$1" & founds & "$4")
+ of 'p','P':
+  for on in fpath:
+   whole= whole.replace(re(
+    r"(?s)^(\Q" & on[0] & r"\E)"), "$1" & founds)
+ else:
+  for on in fpath:
+   whole= whole.replace(re(
+    r"(?s)^(\Q" & on[0] & r"\E)" & nodRE), "$1$2$3" & founds)
  echo "\nCopying result:\n",whole
 of 'r','R':
  fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
