@@ -1,15 +1,16 @@
-## Get or Remove HTML element
+## Get, Remove or Copy Markup Language elements
 
-Get or Remove HTML element(s) in a file by specifying a path    
+Do such operations in a file by specifying the path
 
-The element path is of [Xpath](https://www.w3schools.com/xml/xpath_syntax.asp) syntax e.g:
+This should be of [Xpath](https://www.w3.org/TR/1999/REC-xpath-19991116/#path-abbrev) syntax, e.g:
 
 ```html/body/div[1]/div/div[2]```
 
-means find in a given HTML or XML file, the second div tag element that is under every div element, under the first div element, under any body element, under any html element.
+means find in a given HTML or XML file, the second div tag element node under every div element lies under the first div element, under any body element, under any html element.
 
-```html/body/div[1]//div[1]/div[2]```
+```html/body/div[3]//div[1]/div```
 
-means find in a given HTML or XML file, the second div tag element that is under the first div element lies anywhere, by depth or breadth, in the first div element of any body element, under any html element.
+means find in a given HTML or XML file, any div tag element node under the first div element lies at any depth under the third div element of any body element, under any html element.
 
 It may be put in multiply one after another delimited by ```;``` or ```|```
+For copying, follow it by two characters ```+>``` and then target path of copy
