@@ -13,9 +13,11 @@ template numChr( c :char, s: string) :uint=
  res
 
 let             # ML regexes
- nond= r"(?:[^<>]*+(?:<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+"  # no node & asymetric tag content
- aCtn= re("(?s)^(" & nond & ")(.+)")
- nodRE= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & nond & r"(?-2)?)*+</\g-1>))"
+ tx= r"[^<>]*+"                    # text node & comment/asymetric tag as element node content:
+ txCtnt= "(?:" & tx & r"(?:<(?>!--)[^>]*+>)?)*+"
+ ctntR= "(?:" & tx & r"(?:<(?>!--\s*|meta|link|input|img|hr|base)\b[^>]*+>)?)*+"
+ ctnt= re("(?s)^(" & ctntR & ")(.+)")
+ nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)?)*+</\g-1>))"
  headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
  head= re("(?s)^" & headR & "(.+)")
 var
@@ -39,7 +41,7 @@ template nodeC( tot, max, d :uint)=
    return true
  off &= g[2].get
  while true:
-   let m = str.find aCtn
+   let m = str.find ctnt
    off &= m.get.captures[0]
    str= m.get.captures[1]
    if str[0..1] == "</" :
@@ -76,7 +78,7 @@ proc node( str, tag :string) :bool=
 
 template ctntNode( rem, tag, res_offset :untyped) :bool=
  let m {.inject.}= rem.find re(
-  "(?s)^((?:" & nond & "(?:(?!<" & tag & r"\b)" & nodRE & ")?)*+)(?=<" & tag & r"\b)" & nodRE & "(.+)" )
+  "(?s)^((?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+)(?=<" & tag & r"\b)" & nodeR & "(.+)" )
  if m.isNone: false
  else:
   res_offset
@@ -91,7 +93,7 @@ template ctnoTagNode( tag :string) :bool=
 
 template ctnPrevTag( nd :seq[array[2,string]]; isTheTagNode:untyped) =
  while true:
-  let m = remain.find aCtn
+  let m = remain.find ctnt
   offset &= m.get.captures[0]
   remain = m.get.captures[1]
   if isTheTagNode:
@@ -127,23 +129,32 @@ template posiN( posn :string)=
        b= if eq: n else: n-1
  else: a= if eq: n-1 else: n
 
-proc getNthRev( tag :string; n :var uint) :bool=
+proc getNthRev( tag = ""; ntha :var uint) :bool=
  var i :uint
  res= remain          # make use of global res, preserve remain
  while ctnoTagNode( res, tag): i.inc
- if i<n: return false
- n = 1+i-n           # i is max from which subtract n
+ if i<ntha: return false
+ ntha = 1+i-ntha           # i is the max nth from which subtract specified nth
  true
+
+template getText_Nth( ret :seq[array[2,string]]; nodOffset, nod :string; n:uint; nthRev:bool) :bool=
+ nod.headeRemain nodOffset
+ if nthRev and not getNthRev( ntha=n): isERROR
+ else:
+  let m = remain.find re(
+    r"^((?:" & tx & nodeR & ")*+(?=<" & tag & r"\b)" & nodeR & "){" & $n & "})")
+  isSUCCEED
+
 
 template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; n:uint; nthRev:bool) :bool=
  nod.headeRemain nodOffset
  if nthRev and not getNthRev( tag, n): isERROR
  else:
-  let m = remain.find re(
-    r"^((?:(?:" & nond & "(?:(?!<" & tag & r"\b)" & nodRE & ")?)*+(?=<" & tag & r"\b)" & nodRE & "){" & $n & "})")
+  let m= remain.find re(
+    r"^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $n & "})")
   if m.isNone: isERROR
   else:
-   var r = m.get.captures[3]
+   var r= m.get.captures[3]
    ret.add [offset & m.get.captures[0][0..^r.len+1], r]
    isSUCCEED
 
@@ -279,31 +290,34 @@ template multiNLoop( xPathPat :untyped) =
 
 proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
  var
-  g= path.find(re"(?x)^/ (/)? (?> ([^/@*[]+) (?> \[ (?> (last\(\)-)? ([1-9]\d*) | position\(\) (?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
+  g= path.find(re"(?x)^/ (/)? (?> text\(\)\[([1-9]\d*)\] | ([^/@*[]+) (?> \[ (?> (?>(last\(\)-)|position\(\)=)? ([1-9]\d*) | position\(\) (?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
   nth :uint
-  tag, posn, attg, aatt :string
+  txtN, tag, posn, attg, aatt :string
   isAllDepths = g[0].isSome
-  isTag = g[1].isSome
-  nthRev = g[2].isSome
-  isNth = g[3].isSome
-  isPosn = g[4].isSome
-  isAttg = g[5].isSome
-  isAatt = g[6].isSome
-  remPath = g[8].get
+  isTxNode = g[1].isSome
+  isTag = g[2].isSome
+  nthRev = g[3].isSome
+  isNth = g[4].isSome
+  isPosn = g[5].isSome
+  isAttg = g[6].isSome
+  isAatt = g[7].isSome
+  remPath = g[9].get
   minD= 1+numChr( '/', remPath)
   retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNodeInPly)   # retOffNode would be offset-node found...
  for _ in 0..avgOffNodeInPly:
   retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
- if isTag:
-   tag = g[1].get
+ if isTxNode:
+  txtN= g[1].get
+ elif isTag:
+   tag= g[2].get
    if isNth:
-     nth = g[3].get.strUint
+     nth= g[4].get.strUint
    elif isPosn:
-     posn = g[4].get
+     posn= g[5].get
    elif isAttg:
-     attg = g[5].get
+     attg= g[6].get
  elif isAatt:
-   aatt = g[6].get
+   aatt= g[7].get
  if isAllDepths:              # all depths under current //
   if isTag:
    if isNth:
@@ -318,6 +332,9 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
   else:
    multiNLoop:
     getAllDepthMultiN retOffNode, u[0], u[1], minD
+ elif isTxNode:
+   multiNLoop:
+    getText_Nth retOffNode, u[0], u[1], nth, nthRev
  elif isTag:
   if isNth:
    multiNLoop:
@@ -330,7 +347,7 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
    getE_MultiN retOffNode, u[0], u[1], aatt
  else:
   multiNLoop:
-   getE_MultiN retOffNode, u[0], u[1]     # any node. Be any of these true, it failed finding, now see
+   getE_MultiN retOffNode, u[0], u[1]  # any node. Be any of these true, it failed finding, so see if
  isSUCCEED
 
 var
@@ -385,8 +402,8 @@ template validatingML( f, w :string)=
   r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" )
  if m.isNone or
   not m.get.captures[3].node or (let r=remain.replace(re"^\s+|\s+$",""); r).len>0 and
-  not r.contains(re("(?:" & nodRE & r"\s*)*")):
-   echo "\nCan't parse it due to ill-form or unbalanced mark-up language tag pair\nAborting"
+  not r.contains(re("(?:" & nodeR & r"\s*)*")):
+   echo "\nCan't parse it due to mark-up language's ill-form or unbalanced tag pair\nAborting"
    quit(0)
  iniNode= @[[m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"]]
 
@@ -433,27 +450,27 @@ template path_search_B( asTarget="")=
    short.add aPath
  if miss.len>0:
   if pathResult.len>0:
-    echo "\nSkip every unfound path and keep going for the found ones? (y: yes. Any else: Abort) "
+    echo "\nSkip every unfound path and keep going for the found ones? (y: Yes. else key: Abort) "
     if getch()=='y':
-     echo "\nTrying to process every path found:"
+     echo "To process every path"
      for p in pathResult:
       echo "\n",p[0]
     else: quit("\nAborting",0)
-  else: quit("\nNothing was done " & asTarget,0)
- else: echo "Every given path was found"
+  else: quit("\nNothing was done" & asTarget,0)
+ else: stdout.write "Every given path was "
  if asTarget=="":
       unsortRes: founds &= j[1]
  else:unsortRes: discard
-template each_path_search( file :string; asTarget="") =
+template each_path_search( file :string; asTarget="")=
  file.validatingML
  path_search_H
  path_search_B(asTarget)
- echo "Every element found on document '",file,"' as xpath specified:\n",foundd
+ echo "found on document '",file,"'",asTarget,"\nEvery element of it:\n",foundd
 
 ######   main   ######
 let
  xpath=
-  re"(?x) ^(?> /?/? (([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d* | position\(\)(?!<1)[<>]=? [0-9]\d* | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
+  re"(?x) ^(?> /?/? (([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d* | position\(\) (?!<1)[<>]=? [0-9]\d* | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
  cmdLine= commandLineParams()
  (pathStr, srcFile)= if cmdLine.len>0:    # This block expectedly error and need a knowledgable one's
   echo "\nTry to accomplish:"             # colloboration to correct it
@@ -465,7 +482,7 @@ let
    l = cmdLine[0]
   (cmdLine[2], cmdLine[3])
  else:
-   echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put in two data,\nFirst, element path. On copy operation that'd be the source and target ones delimited by '+>'\nSecond, the HTML/XML file name\n"
+   echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put in two data,\nFirst, element path. Copy operation may be as source then target delimited by '+>'\nSecond, the HTML/XML file name :\n"
    (readLine(stdin), readLine(stdin)) 
 if pathStr.len==0: echo "\nNo Xpath given";quit(0)
 var
@@ -495,32 +512,32 @@ of 'c','C':
  else:
   dstPath=srdPaths[1]
  dstPath.xPathsCheck : "of copy target"
- echo "Specify the copy target file name (Enter: the same as the source):"
+ echo "Specify the copy target file (Enter: as the same as the source):"
  let dstFile=readLine(stdin)
  if dstFile != "":
-  dstFile.each_path_search: "for copy operation"
+  dstFile.each_path_search: " to copying"
  else:
-  path_search_B: "to copying"
-  echo "Every copy target element found:\n",foundd
+  path_search_B: " to copying"
+  echo "found as copy target in the same document '",srcFile,"'\nEvery element of it:\n",foundd
  fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
- echo "Should source element be under target element, replacing, preceding, or following it?\n(u: Under it. r: Replacing it. p: Preceding it. else key: Following it)"
+ echo "Should source element be under target element, replacing it, preceding it, or following it?\n(u: Under it. r: Replacing it. p: Preceding it. else key: Following it)"
  case getch()
  of 'u','U':
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^(\Q" & on[0] & r"\E)" & headR), "$1$2" & founds)
+    r"(?s)^\Q" & on[0] & r"\E" & headR), "$0" & founds)
  of 'r','R':
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^(\Q" & on[0] & r"\E)" & nodRE & "(.+)"), "$1" & founds & "$4")
+    r"(?s)^(\Q" & on[0] & r"\E)" & nodeR), "$1" & founds)
  of 'p','P':
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^(\Q" & on[0] & r"\E)"), "$1" & founds)
+    r"(?s)^\Q" & on[0] & r"\E"), "$0" & founds)
  else:
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^(\Q" & on[0] & r"\E)" & nodRE), "$1$2$3" & founds)
+    r"(?s)^\Q" & on[0] & on[1] & r"\E"), "$0" & founds)
  echo "\nCopying result:\n",whole
 of 'r','R':
  fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
