@@ -12,11 +12,13 @@ template numChr( c :char, s: string) :uint=
   if i==c: res.inc
  res
 
-let             # ML regexes
- tx= r"[^<>]*+"                    # text node & comment/asymetric tag as element node content:
- ctntR= "(?:" & tx & r"(?><!--[^>]*+-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+"
+let       # ML regexes
+   # text node & comment/asymetric tag as text node
+ txNodeR= r"(?:[^<>]++(?><!--[^/>]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)++"
+   # and as element node content
+ ctntR= r"(?:[^<>]*+(?><!--[^/>]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+"
  ctnt= re("(?s)^(" & ctntR & ")(.+)")
- nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)?)*+</\g-1>))"
+ nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)*+)*+</\g-1>))"
  headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
  head= re("(?s)^" & headR & "(.+)")
 var
@@ -133,7 +135,7 @@ proc getxNRev( n :var string) :bool=
   n_uint=n.strUint
  while true:
   inc(i)
-  let m= remain.find re( r"^(?:(?:" & nodeR & ")*" & ctntR & "){" & $i & "}" )
+  let m= remain.find re( r"^(?:" & nodeR & "*" & txNodeR & "){" & $i & "}" )
   if m.isNone: break
  if i<=n_uint: return false
  n= $(i-n_uint)         # i is the max nth from which subtract the specified nth
@@ -154,7 +156,7 @@ template getTextNth( ret :seq[array[2,string]]; nodOffset, nod, n :string; nthRe
  nod.headeRemain nodOffset
  if txNRev and not getxNRev( n): isERROR
  else:
-  let m= remain.find re( r"^((?:" & nodeR & "*(" & ctntR & ")){" & n & "})" )
+  let m= remain.find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & n & "})" )
   if m.isNone: isERROR
   else:
    var r= m.get.captures[3]
@@ -168,10 +170,10 @@ macro getTextMulN( ret :var seq[array[2,string]]; nodOffset, nod, posn :string) 
   if `posn` != "": `posn`.posiN
   while true:
    inc(i)
-   let m= remain.find re( r"^((?:(?:" & nodeR & ")*(" & ctntR & ")){" & $i & "})" )
+   let m= remain.find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & $i & "})" )
    if m.isNone: break
    if i > a and (b==0 or i <= b):
-    var r= m.get.captures[1]
+    var r= m.get.captures[3]
     `ret`.add [offset & m.get.captures[0][0..^r.len+1], r]
   `ret`.len==0
 
