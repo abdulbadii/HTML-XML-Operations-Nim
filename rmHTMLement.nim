@@ -11,12 +11,10 @@ template numChr( c :char, s: string) :uint=
  for i in s:
   if i==c: res.inc
  res
+let       # ML regexes       text node & comment/asymetric tag as content of text node:
 
-let       # ML regexes
-   # text node & comment/asymetric tag as text node
  txNodeR= r"(?:[^<>]++(?><!--[^/>]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)++"
-   # and as element node content
- ctntR= r"(?:[^<>]*+(?><!--[^/>]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+"
+ ctntR= r"(?:[^<>]*+(?><!--[^/>]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+" # and of element node
  ctnt= re("(?s)^(" & ctntR & ")(.+)")
  nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)*+)*+</\g-1>))"
  headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
@@ -63,7 +61,7 @@ template nodeC( tot, max, d :uint)=
 
 # 2 node functions to find direct closed tag or nested node content, it'd count the max depth, nodes etc
 # they're just header; with and without lookahead tag fed to the recursive node function inside
-proc node( str = remain) :bool=
+proc node( str= remain) :bool=
  var tot, max, d :uint
  proc nodeRec( str :string) :bool=
   let m= str.find re"(?xs) ^<([a-z]\w*+) (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)"
@@ -172,7 +170,7 @@ macro getTextMulN( ret :var seq[array[2,string]]; nodOffset, nod, posn :string) 
    inc(i)
    let m= remain.find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & $i & "})" )
    if m.isNone: break
-   if i > a and (b==0 or i <= b):
+   if i>a and (b==0 or i<=b):
     var r= m.get.captures[3]
     `ret`.add [offset & m.get.captures[0][0..^r.len+1], r]
   `ret`.len==0
@@ -201,7 +199,7 @@ macro getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod, tag, posn, att
   while true:
    if ctnoTagNode( `tag`):
     i.inc
-    if i > a and (b==0 or i <= b):
+    if i>a and (b==0 or i <= b):
      `ret`.add [offset, res]
     offset &= res
    else: break
@@ -314,8 +312,8 @@ template offsetNodeLoop( xPathPat :untyped) =
    if i<offsetNode.high: continue     # if it's not the last in loop, go on iterating, otherwise
    return resultArr.len==0              # return true (1) if finding none or false if finding any
   if remPath.len > 0:
-   let e = getE_Path_R( remPath, retOffNode)   #..retOffNode keeps propagating to the next, whose
-   if i==offsetNode.high : return e            # boolean result is returned if this is the last iteration
+   let e = getE_Path_R( remPath, retOffNode)   #...is propagating to the next depth which return a boolean
+   if i==offsetNode.high : return e            # value and will be returned if this is the last iteration 
   else:
    resultArr.add retOffNode
 
@@ -329,33 +327,33 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
   isTxNode   = g[1].isSome
   isTxNodeNth= g[3].isSome
   isTxNodePos= g[4].isSome
-  isTag = g[5].isSome
-  isNth = g[7].isSome
+  isTag  = g[5].isSome
+  isNth  = g[7].isSome
   isPosn = g[8].isSome
   isAttg = g[9].isSome
   isAatt = g[10].isSome
-  remPath = g[12].get
+  remPath= g[12].get
   minD= 1+numChr( '/', remPath)
-  retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNodeInPly)   # retOffNode would be offset-node found...
+  retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNodeInPly)   # retOffNode would be offset-node found which...
  for _ in 0..avgOffNodeInPly:
   retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  if isTxNode:
   if isTxNodeNth:
    txNRev= g[2].isSome
    txNth= g[3].get
-  else:
+  elif isTxNodePos:
    txPos= g[4].get
  elif isTag:
-   tag= g[5].get
-   if isNth:
-     nthRev= g[6].isSome
-     nth= g[7].get.strUint
-   elif isPosn:
-     posn= g[8].get
-   elif isAttg:
-     attg= g[9].get
+  tag= g[5].get
+  if isNth:
+    nthRev= g[6].isSome
+    nth= g[7].get.strUint
+  elif isPosn:
+    posn= g[8].get
+  elif isAttg:
+    attg= g[9].get
  elif isAatt:
-   aatt= g[10].get
+  aatt= g[10].get
  if isAllDepths:              # all depths under current //
   if isTag:
    if isNth:
@@ -389,26 +387,26 @@ var
 template xPathsCheck( path:string; hasTarget="")=
  paths.reset
  for p in path.split re"[|;]":
-   if p.contains xpath:
-     if p.contains re"^[^/]":
-       if aCP.len == 0:
-        echo "\n'",p,"' is relative to base/current path which is empty"
-        while true:
-         echo "\nPut a valid one: "
-         aCP = readLine(stdin).replace( re"\h+", "")
-         if aCP.contains xpath: break
-         echo "\n'",aCP,"' is not a valid Xpath"
-       aCP &= "/"
-       var pr= p.replace( re"^\./", "")
-       while pr.contains(re"^\.\.") :
-         if aCP == "/" : echo "\n'", pr,"' upward node ..\nran over '",aCP,"' current path";quit(0)
-         aCP = aCP.replace( re"[^/]+/$", "")
-         pr = pr.replace( re"^../?", "")
-       paths.add( aCP & pr)
-     else: paths.add( p)
-   else:
-    echo "\n'",p,"' is invalid Xpath\nSkip? (s: skip. else: abort): "
-    if getch() != 's': echo "\nAborting";quit(1)
+  if p.contains xpath:
+    if p.contains re"^[^/]":
+      if aCP.len == 0:
+       echo "\n'",p,"' is relative to base/current path which is empty"
+       while true:
+        echo "\nPut a valid one: "
+        aCP = readLine(stdin).replace( re"\h+", "")
+        if aCP.contains xpath: break
+        echo "\n'",aCP,"' is not a valid Xpath"
+      aCP &= "/"
+      var pr= p.replace( re"^\./", "")
+      while pr.contains(re"^\.\.") :
+        if aCP == "/" : echo "\n'", pr,"' upward node ..\nran over '",aCP,"' current path";quit(0)
+        aCP = aCP.replace( re"[^/]+/$", "")
+        pr = pr.replace( re"^../?", "")
+      paths.add( aCP & pr)
+    else: paths.add( p)
+  else:
+   echo "\n'",p,"' is invalid Xpath\nSkip? (s: skip. else: abort): "
+   if getch() != 's': echo "\nAborting";quit(1)
  let totPaths {.inject.}= paths.len.uint
  if totPaths==0: quit("\nNo valid xpath " & hasTarget,0)
 
