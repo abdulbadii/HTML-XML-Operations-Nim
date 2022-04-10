@@ -14,8 +14,7 @@ template numChr( c :char, s: string) :uint=
 
 let             # ML regexes
  tx= r"[^<>]*+"                    # text node & comment/asymetric tag as element node content:
- txCtnt= "(?:" & tx & r"(?:<(?>!--)[^>]*+>)?)*+"
- ctntR= "(?:" & tx & r"(?:<(?>!--\s*|meta|link|input|img|hr|base)\b[^>]*+>)?)*+"
+ ctntR= "(?:" & tx & r"(?><!--[^>]*+-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+"
  ctnt= re("(?s)^(" & ctntR & ")(.+)")
  nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)?)*+</\g-1>))"
  headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
@@ -60,7 +59,7 @@ template nodeC( tot, max, d :uint)=
    else: break
  return false
 
-# 2 node functions to find direct closed tag or nested node content, it'll count max depth, nodes etc
+# 2 node functions to find direct closed tag or nested node content, it'd count the max depth, nodes etc
 # they're just header; with and without lookahead tag fed to the recursive node function inside
 proc node( str = remain) :bool=
  var tot, max, d :uint
@@ -85,7 +84,6 @@ template ctntNode( rem, tag, res_offset :untyped) :bool=
   rem= m.get.captures[5]
   true
 
-template ctnoTagNode( remn, tag :string) :bool= ctntNode remn, tag :discard
 template ctnoTagNode( tag :string) :bool=
  ctntNode remain, tag :
   offset &= m.get.captures[0]
@@ -129,22 +127,53 @@ template posiN( posn :string)=
        b= if eq: n else: n-1
  else: a= if eq: n-1 else: n
 
-proc getNthRev( tag = ""; ntha :var uint) :bool=
- var i :uint
- res= remain          # make use of global res, preserve remain
- while ctnoTagNode( res, tag): i.inc
- if i<ntha: return false
- ntha = 1+i-ntha           # i is the max nth from which subtract specified nth
+proc getxNRev( n :var string) :bool=
+ var
+  i :uint
+  n_uint=n.strUint
+ while true:
+  inc(i)
+  let m= remain.find re( r"^(?:(?:" & nodeR & ")*" & ctntR & "){" & $i & "}" )
+  if m.isNone: break
+ if i<=n_uint: return false
+ n= $(i-n_uint)         # i is the max nth from which subtract the specified nth
  true
 
-template getText_Nth( ret :seq[array[2,string]]; nodOffset, nod :string; n:uint; nthRev:bool) :bool=
- nod.headeRemain nodOffset
- if nthRev and not getNthRev( ntha=n): isERROR
- else:
-  let m = remain.find re(
-    r"^((?:" & tx & nodeR & ")*+(?=<" & tag & r"\b)" & nodeR & "){" & $n & "})")
-  isSUCCEED
+proc getNthRev( tag = ""; ntha :var uint) :bool=
+ var i :uint
+ while true:
+  inc(i)
+  let m= remain.find re(
+   "(?s)^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $i & "})" )
+  if m.isNone: break
+ if i<=ntha: return false
+ ntha = i-ntha
+ true
 
+template getTextNth( ret :seq[array[2,string]]; nodOffset, nod, n :string; nthRev:bool) :bool=
+ nod.headeRemain nodOffset
+ if txNRev and not getxNRev( n): isERROR
+ else:
+  let m= remain.find re( r"^((?:" & nodeR & "*(" & ctntR & ")){" & n & "})" )
+  if m.isNone: isERROR
+  else:
+   var r= m.get.captures[3]
+   ret.add [offset & m.get.captures[0][0..^r.len+1], r]
+   isSUCCEED
+
+macro getTextMulN( ret :var seq[array[2,string]]; nodOffset, nod, posn :string) :bool=
+ result = quote do:
+  `nod`.headeRemain `nodOffset`
+  var a,b,i :uint
+  if `posn` != "": `posn`.posiN
+  while true:
+   inc(i)
+   let m= remain.find re( r"^((?:(?:" & nodeR & ")*(" & ctntR & ")){" & $i & "})" )
+   if m.isNone: break
+   if i > a and (b==0 or i <= b):
+    var r= m.get.captures[1]
+    `ret`.add [offset & m.get.captures[0][0..^r.len+1], r]
+  `ret`.len==0
 
 template getE_Nth( ret :seq[array[2,string]]; nodOffset, nod, tag :string; n:uint; nthRev:bool) :bool=
  nod.headeRemain nodOffset
@@ -276,7 +305,7 @@ template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :u
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
 
-template multiNLoop( xPathPat :untyped) =
+template offsetNodeLoop( xPathPat :untyped) =
  for i, u {.inject.} in offsetNode:
   retOffNode.reset
   if xPathPat:
@@ -290,64 +319,66 @@ template multiNLoop( xPathPat :untyped) =
 
 proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
  var
-  g= path.find(re"(?x)^/ (/)? (?> text\(\)\[([1-9]\d*)\] | ([^/@*[]+) (?> \[ (?> (?>(last\(\)-)|position\(\)=)? ([1-9]\d*) | position\(\) (?!<1)([<>]=? [1-9]\d*) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
+  g= path.find(re"(?x)^/ (/)? (?> (text\(\)) (?: \[ (?> (last\(\)-)? ([1-9]\d*+) | position\(\) (?!<1) ([<>]=? [1-9]\d*+) ) \] )? | ([^/@*[]+) (?: \[ (?> (?>(last\(\)-)|position\(\)=)? ([1-9]\d*+) | position\(\) (?!<1) ( [<>]=? [1-9]\d*+ ) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
   nth :uint
-  txtN, tag, posn, attg, aatt :string
-  isAllDepths = g[0].isSome
-  isTxNode = g[1].isSome
-  isTag = g[2].isSome
-  nthRev = g[3].isSome
-  isNth = g[4].isSome
-  isPosn = g[5].isSome
-  isAttg = g[6].isSome
-  isAatt = g[7].isSome
-  remPath = g[9].get
+  txNth, txPos, tag, posn, attg, aatt :string
+  nthRev, txNRev :bool
+  isAllDepths= g[0].isSome
+  isTxNode   = g[1].isSome
+  isTxNodeNth= g[3].isSome
+  isTxNodePos= g[4].isSome
+  isTag = g[5].isSome
+  isNth = g[7].isSome
+  isPosn = g[8].isSome
+  isAttg = g[9].isSome
+  isAatt = g[10].isSome
+  remPath = g[12].get
   minD= 1+numChr( '/', remPath)
   retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNodeInPly)   # retOffNode would be offset-node found...
  for _ in 0..avgOffNodeInPly:
   retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  if isTxNode:
-  txtN= g[1].get
+  if isTxNodeNth:
+   txNRev= g[2].isSome
+   txNth= g[3].get
+  else:
+   txPos= g[4].get
  elif isTag:
-   tag= g[2].get
+   tag= g[5].get
    if isNth:
-     nth= g[4].get.strUint
+     nthRev= g[6].isSome
+     nth= g[7].get.strUint
    elif isPosn:
-     posn= g[5].get
+     posn= g[8].get
    elif isAttg:
-     attg= g[6].get
+     attg= g[9].get
  elif isAatt:
-   aatt= g[7].get
+   aatt= g[10].get
  if isAllDepths:              # all depths under current //
   if isTag:
    if isNth:
-    multiNLoop:
-     getAllDepthNth retOffNode, u[0], u[1], tag, minD, nth, nthRev
+    offsetNodeLoop: getAllDepthNth retOffNode, u[0], u[1], tag, minD, nth, nthRev
    else:
-    multiNLoop:
-     getAllDepthMultiN retOffNode, u[0], u[1], minD, tag, posn, attg
+    offsetNodeLoop: getAllDepthMultiN retOffNode, u[0], u[1], minD, tag, posn, attg
   elif isAatt:
-   multiNLoop:
-    getAllDepthMultiN retOffNode, u[0], u[1], minD, aatt=aatt
+   offsetNodeLoop: getAllDepthMultiN retOffNode, u[0], u[1], minD, aatt=aatt
   else:
-   multiNLoop:
-    getAllDepthMultiN retOffNode, u[0], u[1], minD
- elif isTxNode:
-   multiNLoop:
-    getText_Nth retOffNode, u[0], u[1], nth, nthRev
+   offsetNodeLoop: getAllDepthMultiN retOffNode, u[0], u[1], minD
  elif isTag:
   if isNth:
-   multiNLoop:
-    getE_Nth retOffNode, u[0], u[1], tag, nth, nthRev
+   offsetNodeLoop: getE_Nth retOffNode, u[0], u[1], tag, nth, nthRev
   else:
-   multiNLoop:
+   offsetNodeLoop:
     getE_MultiN retOffNode, u[0], u[1], tag, posn, attg
  elif isAatt:
-  multiNLoop:
-   getE_MultiN retOffNode, u[0], u[1], aatt
+  offsetNodeLoop: getE_MultiN retOffNode, u[0], u[1], aatt
+ elif isTxNode:
+  if isTxNodeNth:
+   offsetNodeLoop: getTextNth retOffNode, u[0], u[1], txNth, txNRev
+  else:
+   offsetNodeLoop: getTextMulN retOffNode, u[0], u[1], txPos
  else:
-  multiNLoop:
-   getE_MultiN retOffNode, u[0], u[1]  # any node. Be any of these true, it failed finding, so see if
+  offsetNodeLoop: getE_MultiN retOffNode, u[0], u[1]  # be any of these true, it failed finding, so see if
  isSUCCEED
 
 var
@@ -355,9 +386,9 @@ var
  paths :seq[ string]
 template xPathsCheck( path:string; hasTarget="")=
  paths.reset
- for p in path.split re"[|;]" :
+ for p in path.split re"[|;]":
    if p.contains xpath:
-     if p.contains re"^[^/]" :
+     if p.contains re"^[^/]":
        if aCP.len == 0:
         echo "\n'",p,"' is relative to base/current path which is empty"
         while true:
@@ -414,6 +445,7 @@ template unsortRes( fnd:untyped)=
   for j{.inject.} in i[1]:
    foundd &= "\n--------\n" & j[1]
    fnd
+
 template path_search_H=
  avgOffNodeInPly= (totN.float / maxND.float * 1.5 ).uint
  pathResult = newSeqOfCap[ (string, seq[ array[ 2, string]]) ](totPaths)        # Preallocation
@@ -469,8 +501,7 @@ template each_path_search( file :string; asTarget="")=
 
 ######   main   ######
 let
- xpath=
-  re"(?x) ^(?> /?/? (([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d* | position\(\) (?!<1)[<>]=? [0-9]\d* | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
+ xpath=  re"(?x) ^(?> /?/? ( text\(\) (?: \[ (?> (?:last\(\)-)? [1-9]\d*+ | position\(\) (?!<1) [<>]=? [1-9]\d*+) \] )? | ([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d*+ | position\(\) (?!<1)[<>]=? [0-9]\d*+ | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
  cmdLine= commandLineParams()
  (pathStr, srcFile)= if cmdLine.len>0:    # This block expectedly error and need a knowledgable one's
   echo "\nTry to accomplish:"             # colloboration to correct it
@@ -482,7 +513,7 @@ let
    l = cmdLine[0]
   (cmdLine[2], cmdLine[3])
  else:
-   echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put in two data,\nFirst, element path. Copy operation may be as source then target delimited by '+>'\nSecond, the HTML/XML file name :\n"
+   echo "Element path is of Xpath form e.g:\n\thtml/body/div[1]//div[1]/div[2]\nmeans find in a given HTML or XML file, the second div tag element that is under the first\ndiv element anywhere under the first div element, under any body element,\nunder any html element.\n\nTo put multiply at once, put one after another delimited by ; or |. Put in two data,\nFirst, the element path. Copy operation may be as source then target delimited by '+>'\nSecond, the HTML/XML file name :\n"
    (readLine(stdin), readLine(stdin)) 
 if pathStr.len==0: echo "\nNo Xpath given";quit(0)
 var
@@ -494,8 +525,8 @@ var
  opt :char
  founds, foundd :string
 srdPaths[0].xPathsCheck
-block:                     # scope to get around no equivalent C++ delete command
- srcFile.each_path_search  # hopefully any allocation inside getting freed by automatic Nim GC
+block:                     # scope to get around equivalent C++ delete command
+ srcFile.each_path_search  # hopefully once exits scope, any allocation inside gets freed by Nim GC
 
 if cmdLine.len==0:
  opt= if srdPaths.len>1:'c'
@@ -512,7 +543,7 @@ of 'c','C':
  else:
   dstPath=srdPaths[1]
  dstPath.xPathsCheck : "of copy target"
- echo "Specify the copy target file (Enter: as the same as the source):"
+ echo "\nSpecify the copy target file (Enter: as the same as the source):"
  let dstFile=readLine(stdin)
  if dstFile != "":
   dstFile.each_path_search: " to copying"
@@ -525,19 +556,19 @@ of 'c','C':
  of 'u','U':
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^\Q" & on[0] & r"\E" & headR), "$0" & founds)
+    r"^\Q" & on[0] & r"\E" & headR), "$0" & founds)
  of 'r','R':
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^(\Q" & on[0] & r"\E)" & nodeR), "$1" & founds)
+    r"^(\Q" & on[0] & r"\E)" & nodeR), "$1" & founds)
  of 'p','P':
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^\Q" & on[0] & r"\E"), "$0" & founds)
+    r"^\Q" & on[0] & r"\E"), "$0" & founds)
  else:
   for on in fpath:
    whole= whole.replace(re(
-    r"(?s)^\Q" & on[0] & on[1] & r"\E"), "$0" & founds)
+    r"^\Q" & on[0] & on[1] & r"\E"), "$0" & founds)
  echo "\nCopying result:\n",whole
 of 'r','R':
  fpath.sort( proc( a,b :array[2,string]) :int=cmp( b[0].len, a[0].len) )
