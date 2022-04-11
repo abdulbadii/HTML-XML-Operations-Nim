@@ -13,8 +13,8 @@ template numChr( c :char, s: string) :uint=
  res
 let       # ML regexes       text node & comment/asymetric tag as content of text node:
 
- txNodeR= r"(?:[^<>]++(?><!--[^/>]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)++"
- ctntR= r"(?:[^<>]*+(?><!--[^/>]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+" # and of element node
+ txNodeR= r"(?:[^<>]++(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)++"
+ ctntR= r"(?:[^<>]*+(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+" # as of element node
  ctnt= re("(?s)^(" & ctntR & ")(.+)")
  nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)*+)*+</\g-1>))"
  headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
@@ -23,7 +23,7 @@ var
  whole, offset, res, remain :string
  totN, maxND :uint
 
-template nodeC( tot, max, d :uint)=
+template nodeB( tot, max, d :uint)=
  if m.isNone: return false
  let g=m.get.captures.toSeq
  tot.inc; d.inc; if d>max: max=d
@@ -65,14 +65,14 @@ proc node( str= remain) :bool=
  var tot, max, d :uint
  proc nodeRec( str :string) :bool=
   let m= str.find re"(?xs) ^<([a-z]\w*+) (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)"
-  nodeC tot, max, d
+  nodeB tot, max, d
  nodeRec str
 
 proc node( str, tag :string) :bool=
  var tot, max, d :uint
  proc nodeRec( str :string; tag="") :bool=
   let m= str.find re("(?xs) ^<(" & tag & r"[a-z]\w*+) (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" )
-  nodeC tot, max, d
+  nodeB tot, max, d
  nodeRec str, tag
 
 template ctntNode( rem, tag, res_offset :untyped) :bool=
@@ -84,7 +84,7 @@ template ctntNode( rem, tag, res_offset :untyped) :bool=
   rem= m.get.captures[5]
   true
 
-template ctnoTagNode( tag :string) :bool=
+template ctnoTagNode( tag="") :bool=
  ctntNode remain, tag :
   offset &= m.get.captures[0]
   res= m.get.captures[3]
@@ -144,7 +144,7 @@ proc getNthRev( tag = ""; ntha :var uint) :bool=
  while true:
   inc(i)
   let m= remain.find re(
-   "(?s)^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $i & "})" )
+   "^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $i & "})" )
   if m.isNone: break
  if i<=ntha: return false
  ntha = i-ntha
@@ -199,7 +199,7 @@ macro getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod, tag, posn, att
   while true:
    if ctnoTagNode( `tag`):
     i.inc
-    if i>a and (b==0 or i <= b):
+    if i>a and (b==0 or i<=b):
      `ret`.add [offset, res]
     offset &= res
    else: break
@@ -217,13 +217,12 @@ template getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod, aatt :strin
 template getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string) :bool=
  nod.headeRemain nodOffset
  while true:
-  if ctnoTagNode( ""):
+  if ctnoTagNode:
     ret.add [offset, res]
     offset &= res
   else: break
  ret.len==0
 
-var avgOffNodeInPly :uint
 template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
  var
   curNode, nd= newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
@@ -254,10 +253,6 @@ template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :str
  else:
   loopH: nth.loopB
  ret.len==0
-
-var
- maxw :uint
- resultArr :seq[ array[ 2,string]]
 
 template loop( o, n, foundCmd :untyped)=
  var nd, curNode = newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
@@ -312,10 +307,14 @@ template offsetNodeLoop( xPathPat :untyped) =
    if i<offsetNode.high: continue     # if it's not the last in loop, go on iterating, otherwise
    return resultArr.len==0              # return true (1) if finding none or false if finding any
   if remPath.len > 0:
-   let e = getE_Path_R( remPath, retOffNode)   #...is propagating to the next depth which return a boolean
-   if i==offsetNode.high : return e            # value and will be returned if this is the last iteration 
+   let e = getE_Path_R( remPath, retOffNode)   #...is propagating to the next depth which returns a boolean
+   if i==offsetNode.high : return e            # value which is returned if this is the last iteration 
   else:
    resultArr.add retOffNode
+
+var
+ avgOffNodeInPly, maxw :uint
+ resultArr :seq[ array[ 2,string]]
 
 proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
  var
@@ -368,8 +367,7 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
   if isNth:
    offsetNodeLoop: getE_Nth retOffNode, u[0], u[1], tag, nth, nthRev
   else:
-   offsetNodeLoop:
-    getE_MultiN retOffNode, u[0], u[1], tag, posn, attg
+   offsetNodeLoop: getE_MultiN retOffNode, u[0], u[1], tag, posn, attg
  elif isAatt:
   offsetNodeLoop: getE_MultiN retOffNode, u[0], u[1], aatt
  elif isTxNode:
@@ -501,7 +499,7 @@ template each_path_search( file :string; asTarget="")=
 
 ######   main   ######
 let
- xpath=  re"(?x) ^(?> /?/? ( text\(\) (?: \[ (?> (?:last\(\)-)? [1-9]\d*+ | position\(\) (?!<1) [<>]=? [1-9]\d*+) \] )? | ([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d*+ | position\(\) (?!<1)[<>]=? [0-9]\d*+ | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
+ xpath= re"(?x) ^(?> /?/? ( text\(\) (?: \[ (?> (?:last\(\)-)? [1-9]\d*+ | position\(\) (?!<1) [<>]=? [1-9]\d*+) \] )? | ([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d*+ | position\(\) (?!<1)[<>]=? [0-9]\d*+ | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
  cmdLine= commandLineParams()
  (pathStr, srcFile)= if cmdLine.len>0:    # This block expectedly error and need a knowledgable one's
   echo "\nTry to accomplish:"             # colloboration to correct it
