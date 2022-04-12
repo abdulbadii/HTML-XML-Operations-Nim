@@ -409,13 +409,14 @@ template getDocFile( f, w :string)=
    try: w = readFile f
    except IOError as e:
     echo "\nCannot read '",f,"': ",e.msg
+    continue
    except OverflowDefect as e:
     echo e.msg
+    continue
    except:
     echo "\nFile '",outf,"': critical error"
-   finally:
-    echo "Some issue on '",f,"'"
-   break
+    continue
+   finally:break
   else:
    echo "'",f,"' doesn't exist"
   while true:
@@ -588,7 +589,9 @@ if getch()=='y':
     try: writeFile(outf,whole)
     except IOError as e:
      echo "\nCannot write to '",outf,"': ",e.msg
+     continue
     except:
      echo "\nFile '",outf,"': critical error"
-    finally:continue
-    echo "Successfully saved to '",outf,"'";break
+     continue
+    finally:break
+ echo "Successfully saved to '",outf,"'"
