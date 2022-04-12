@@ -11,10 +11,10 @@ template numChr( c :char, s: string) :uint=
  for i in s:
   if i==c: res.inc
  res
-let       # ML regexes       text node & comment/asymetric tag as content of text node:
-
- txNodeR= r"(?:[^<>]++(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)++"
- ctntR= r"(?:[^<>]*+(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)?)*+" # as of element node
+    # ML regexes       text node & comment/asymetric tag as content of text node:
+let
+ txNodeR= r"(?:[^<>]++(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)+"
+ ctntR= r"(?:[^<>]*+(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)*+" # as of element node
  ctnt= re("(?s)^(" & ctntR & ")(.+)")
  nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)*+)*+</\g-1>))"
  headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
@@ -150,7 +150,7 @@ proc getNthRev( tag = ""; ntha :var uint) :bool=
  ntha = i-ntha
  true
 
-template getTextNth( ret :seq[array[2,string]]; nodOffset, nod, n :string; nthRev:bool) :bool=
+template getTextNth( ret :seq[array[2,string]]; nodOffset, nod, n :string; txNRev:bool) :bool=
  nod.headeRemain nodOffset
  if txNRev and not getxNRev( n): isERROR
  else:
@@ -194,8 +194,7 @@ macro getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod, tag, posn, att
    a,b,i :uint
    tag = `tag`
   if `posn` != "": `posn`.posiN
-  elif `att` != "":
-   tag &= r"\s+" & `att`
+  elif `att` != "": tag &= r"\s+" & `att`
   while true:
    if ctnoTagNode( `tag`):
     i.inc
@@ -225,10 +224,10 @@ template getE_MultiN( ret :var seq[array[2,string]]; nodOffset, nod :string) :bo
 
 template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
  var
-  curNode, nd= newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
+  curNode, nd= newSeqOfCap[ array[ 2, string]](avgOffNode_Ply)
   notTag = "(?!" & tag & r"\b)"
   ttag = "(?=" & tag & r"\b)"
- for _ in 0..avgOffNodeInPly:
+ for _ in 0..avgOffNode_Ply:
   nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
   curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  curNode.reset
@@ -243,9 +242,8 @@ template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :str
     curNode= nd
  template loopB(n:uint)=
    for i in 1..n:
-    ctnUp2Tag nd, notTag, ttag :
-     if i==n and maxND >= minD:
-      ret.add [offset, res]
+    ctnUp2Tag nd, notTag, ttag:
+     if i==n and maxND>=minD: ret.add [offset, res]
  if nthRev:
   loopH:
    var n=nth
@@ -255,8 +253,8 @@ template getAllDepthNth( ret :var seq[array[2,string]]; nodOffset, nod, tag :str
  ret.len==0
 
 template loop( o, n, foundCmd :untyped)=
- var nd, curNode = newSeqOfCap[ array[ 2, string]](avgOffNodeInPly)
- for _ in 0..avgOffNodeInPly:
+ var nd, curNode = newSeqOfCap[ array[ 2, string]](avgOffNode_Ply)
+ for _ in 0..avgOffNode_Ply:
   nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
   curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  curNode.reset
@@ -270,7 +268,6 @@ template loop( o, n, foundCmd :untyped)=
     ctnUp2Tag nd, notTag, theTag:
      foundCmd
   curNode=nd
-
 template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD:uint; tag:string; posn, att="") :bool=
  var
   a,b:uint
@@ -285,7 +282,6 @@ template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD:ui
   if i>a and (b==0 or i<=b) and maxND >= minD:
    ret.add [offset, res]
  ret.len==0
-
 template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :uint; aatt :string) :bool=
  var
   notTag {.inject.}= r"(?!\S+\s+" & aatt & ")"
@@ -293,7 +289,6 @@ template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :u
  loop o, n:
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
-
 template getAllDepthMultiN( ret :var seq[array[2,string]]; o, n :string; minD :uint) :bool=
  var notTag{.inject.},theTag{.inject.}=""
  loop o, n:
@@ -306,14 +301,14 @@ template offsetNodeLoop( xPathPat :untyped) =
   if xPathPat:
    if i<offsetNode.high: continue     # if it's not the last in loop, go on iterating, otherwise
    return resultArr.len==0              # return true (1) if finding none or false if finding any
-  if remPath.len > 0:
-   let e = getE_Path_R( remPath, retOffNode)   #...is propagating to the next depth which returns a boolean
-   if i==offsetNode.high : return e            # value which is returned if this is the last iteration 
+  if remPath.len>0:
+   let e = getE_Path_R( remPath, retOffNode)   #...is propagating to the next depth and returning a boolean
+   if i==offsetNode.high: return e            # value which'll be returned if this's the last iteration 
   else:
    resultArr.add retOffNode
 
 var
- avgOffNodeInPly, maxw :uint
+ avgOffNode_Ply, maxw :uint
  resultArr :seq[ array[ 2,string]]
 
 proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
@@ -321,36 +316,34 @@ proc getE_Path_R( path :string; offsetNode :seq[ array[2,string]]) :bool=
   g= path.find(re"(?x)^/ (/)? (?> (text\(\)) (?: \[ (?> (last\(\)-)? ([1-9]\d*+) | position\(\) (?!<1) ([<>]=? [1-9]\d*+) ) \] )? | ([^/@*[]+) (?: \[ (?> (?>(last\(\)-)|position\(\)=)? ([1-9]\d*+) | position\(\) (?!<1) ( [<>]=? [1-9]\d*+ ) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
   nth :uint
   txNth, txPos, tag, posn, attg, aatt :string
-  nthRev, txNRev :bool
-  isAllDepths= g[0].isSome
-  isTxNode   = g[1].isSome
-  isTxNodeNth= g[3].isSome
-  isTxNodePos= g[4].isSome
-  isTag  = g[5].isSome
-  isNth  = g[7].isSome
-  isPosn = g[8].isSome
-  isAttg = g[9].isSome
-  isAatt = g[10].isSome
   remPath= g[12].get
   minD= 1+numChr( '/', remPath)
-  retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNodeInPly)   # retOffNode would be offset-node found which...
- for _ in 0..avgOffNodeInPly:
-  retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
+  retOffNode= newSeqOfCap[ array[ 2,string]](avgOffNode_Ply)   # retOffNode would be offset-node found which...
+ template isAllDepths:bool= g[0].isSome
+ template isTxNode   :bool= g[1].isSome
+ template txNRev     :bool= g[2].isSome
+ template isTxNodeNth:bool= g[3].isSome
+ template isTxNodePos:bool= g[4].isSome
+ template isTag  :bool= g[5].isSome
+ template nthRev  :bool= g[6].isSome
+ template isNth  :bool= g[7].isSome
+ template isPosn :bool= g[8].isSome
+ template isAttg :bool= g[9].isSome
+ template isAatt :bool= g[10].isSome
+ for _ in 0..avgOffNode_Ply: retOffNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  if isTxNode:
   if isTxNodeNth:
-   txNRev= g[2].isSome
    txNth= g[3].get
   elif isTxNodePos:
    txPos= g[4].get
  elif isTag:
   tag= g[5].get
   if isNth:
-    nthRev= g[6].isSome
-    nth= g[7].get.strUint
+   nth= g[7].get.strUint
   elif isPosn:
-    posn= g[8].get
+   posn= g[8].get
   elif isAttg:
-    attg= g[9].get
+   attg= g[9].get
  elif isAatt:
   aatt= g[10].get
  if isAllDepths:              # all depths under current //
@@ -409,29 +402,35 @@ template xPathsCheck( path:string; hasTarget="")=
  if totPaths==0: quit("\nNo valid xpath " & hasTarget,0)
 
 template getDocFile( f :string)=
- var whole {.inject.} :string
  f.getDocFile(whole)
 template getDocFile( f, w :string)=
- if fileExists(f):
-  try:
-   w = readFile f
-  except IOError as e:
-   echo "\nCannot read '",f,"': ",e.msg
-  except:
-   echo "\nFile '",outf,"': critical error"
- else:
-  echo "\n'",f,"' doesn't exist\n";quit(0)
- echo "Checking document '",f,"'... "
+ while true:
+  if fileExists(f):
+   try: w = readFile f
+   except IOError as e:
+    echo "\nCannot read '",f,"': ",e.msg
+   except OverflowDefect as e:
+    echo e.msg
+   except:
+    echo "\nFile '",outf,"': critical error"
+   finally:
+    echo "Some issue on '",f,"'"
+   break
+  else:
+   echo "'",f,"' doesn't exist"
+  while true:
+   stdout.write "Try another file name:"
+   f=readLine(stdin).replace(re"^\h+|\s+$", "")
+   if f.len>0: break
 
-template validatingML( f :string)=
- validatingML( f, whole)
-template validatingML( f, w :string)=
- f.getDocFile(w)
+template validatingML=
+ validatingML( whole)
+template validatingML( w :string)=
  let m= w.find re(
   r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" )
  if m.isNone or
   not m.get.captures[3].node or (let r=remain.replace(re"^\s+|\s+$",""); r).len>0 and
-  not r.contains(re("(?:" & nodeR & r"\s*)*")):
+  not r.contains(re( r"\s*(?:" & nodeR & ")*")):
    echo "\nCan't parse it due to mark-up language's ill-form or unbalanced tag pair\nAborting"
    quit(0)
  iniNode= @[[m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"]]
@@ -445,7 +444,7 @@ template unsortRes( fnd:untyped)=
    fnd
 
 template path_search_H=
- avgOffNodeInPly= (totN.float / maxND.float * 1.5 ).uint
+ avgOffNode_Ply= (totN.float / maxND.float * 1.5 ).uint
  pathResult = newSeqOfCap[ (string, seq[ array[ 2, string]]) ](totPaths)        # Preallocation
  miss = newSeqOfCap[ string ](totPaths)
  let maxFouND = (totN.float * 3 / 4).uint
@@ -492,22 +491,24 @@ template path_search_B( asTarget="")=
       unsortRes: founds &= j[1]
  else:unsortRes: discard
 template each_path_search( file :string; asTarget="")=
- file.validatingML
+ file.getDocFile
+ echo "Checking document '",file,"'... "
+ validatingML()
  path_search_H
- path_search_B(asTarget)
+ path_search_B( asTarget)
  echo "found on document '",file,"'",asTarget,"\nEvery element of it:\n",foundd
 
 ######   main   ######
 let
  xpath= re"(?x) ^(?> /?/? ( text\(\) (?: \[ (?> (?:last\(\)-)? [1-9]\d*+ | position\(\) (?!<1) [<>]=? [1-9]\d*+) \] )? | ([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d*+ | position\(\) (?!<1)[<>]=? [0-9]\d*+ | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
+var
  cmdLine= commandLineParams()
  (pathStr, srcFile)= if cmdLine.len>0:    # This block expectedly error and need a knowledgable one's
   echo "\nTry to accomplish:"             # colloboration to correct it
   for i,l in cmdLine:
    echo i,". ",l
-  quit(0)
   var
-   op = cmdLine[1]
+   op= cmdLine[1]
    l = cmdLine[0]
   (cmdLine[2], cmdLine[3])
  else:
@@ -523,8 +524,8 @@ var
  opt :char
  founds, foundd :string
 srdPaths[0].xPathsCheck
-block:                     # scope to get around equivalent C++ delete command
- srcFile.each_path_search  # hopefully once exits scope, any allocation inside gets freed by Nim GC
+block:                      # scope to get around equivalent C++ delete command with a hope
+ srcFile.each_path_search   # once exiting it, any allocation inside gets freed by Nim GC
 
 if cmdLine.len==0:
  opt= if srdPaths.len>1:'c'
@@ -534,15 +535,14 @@ if cmdLine.len==0:
 
 case opt
 of 'c','C':
- var dstPath :string
- if srdPaths.len==1:
+ var dstPath = if srdPaths.len==1:
   echo "\nPut target element, in xpath form:"
-  dstPath=readLine(stdin)
+  readLine(stdin)
  else:
-  dstPath=srdPaths[1]
+  srdPaths[1]
  dstPath.xPathsCheck : "of copy target"
  echo "\nSpecify the copy target file (Enter: as the same as the source):"
- let dstFile=readLine(stdin)
+ var dstFile=readLine(stdin)
  if dstFile != "":
   dstFile.each_path_search: " to copying"
  else:
@@ -576,15 +576,19 @@ of 'r','R':
 else: whole=founds
 echo "Save to a file? (y: Yes, save. else key: Quit)"
 if getch()=='y':
- echo "File name to save:"
- outf=readLine(stdin).replace(re"^\h+|\s+$", "")
- if outf.len > 0:
-  if fileExists(outf):
-   echo "There exists file name '",outf,"'\nOverwrite it (y: Yes. Else key: Abort)?"
-   if getch() != 'y':
-    echo "\nWon't overwrite it... aborting";quit(0)
-  try: writeFile(outf,whole)
-  except IOError as e:
-   echo "\nCannot write to '",outf,"': ",e.msg
-  except:
-   echo "\nFile '",outf,"': critical error"
+ while true:
+  echo "File name to save:"
+  outf=readLine(stdin).replace(re"^\h+|\s+$", "")
+  if outf.len>0:
+   if fileExists(outf):
+    echo "There is file name '",outf,"'\nOverwrite it (y: Yes. Else key: No) ?"
+    if getch() != 'y':
+     echo "\nNot overwrite it"
+   else:
+    try: writeFile(outf,whole)
+    except IOError as e:
+     echo "\nCannot write to '",outf,"': ",e.msg
+    except:
+     echo "\nFile '",outf,"': critical error"
+    finally:continue
+    echo "Successfully saved to '",outf,"'";break
