@@ -119,9 +119,8 @@ const
  isERROR  = true
  isSUCCEED= false
 
-template posiN( posn :string)=
+template posiN( posn :string, a, b :uint)=
  var
-  a {.inject.}, b {.inject.}:uint
   g = posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
   eq= g[1].isSome
   n = g[2].get.strUint       # Get a-b as lower-upper bound
@@ -153,21 +152,24 @@ proc getNthRev( tag = ""; ntha :var uint) :bool=
  true
 
 template getTextNth( ret :OffNodArray; off, nod, n :string; txNRev:bool) :bool=
- nod.headeRemain off
+ let
+  m = nod.find head
+  offset= off & m.get.captures[0]
+  #rem= m.get.captures[1]
  if txNRev and not getxNRev( n): isERROR
  else:
-  let m= remain.find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & n & "})" )
+  let m= m.get.captures[1].find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & n & "})" )
   if m.isNone: isERROR
   else:
    var r= m.get.captures[3]
    ret.add [offset & m.get.captures[0][0..^r.len+1], r]
    isSUCCEED
 
-macro getTextMulN( ret :var OffNodArray; off, nod, posn :string) :bool=
+macro getTextMulN( ret :OffNodArray; off, nod, posn :string) :bool=
  result = quote do:
   `nod`.headeRemain `off`
   var a,b,i :uint
-  if `posn` != "": `posn`.posiN
+  if `posn` != "": `posn`.posiN(a,b)
   while true:
    inc(i)
    let m= remain.find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & $i & "})" )
@@ -178,24 +180,24 @@ macro getTextMulN( ret :var OffNodArray; off, nod, posn :string) :bool=
   `ret`.len==0
 
 template aDInit {.dirty.}=
- var curNode, nd= newSeqOfCap[ array[ 2, string]](avgOffNode_Ply)
+ var curNode, nd= newSeqOfCap[ StrPair]( avgOffNode_Ply)
  for _ in 0..avgOffNode_Ply:
   nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
   curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
  curNode.reset
  curNode.add [this[Offset], this[Node]]
 
-template getAllDepthTxNth( ret :var OffNodArray; off, nod :string; nth :uint; txNRev:bool) :bool=
+template getAllDepthTxNth( ret :OffNodArray; off, nod :string; nth :uint; txNRev:bool) :bool=
  aDInit
  while curNode.len>0:
   nd.reset
-  for o_n in curNode:
-   getTextNth ret, o_n[0], o_n[1], nth, txNRev
+  for t in curNode:
+   if getTextNth( ret, t[Offset], t[Node], nth, txNRev): ret.add [offset, res]
+   t[Node].headeRemain t[Offset]
    while true:
-    if getOffUp2Tag:
-     nd.add [offset, res]
-    else:
-     break
+    if getOffUp2Tag: nd.add [offset, res]
+    else: break
+  curNode= nd
 
  ret.len==0
  
@@ -211,13 +213,13 @@ template getE_Nth( ret :OffNodArray; off, nod, tag :string; n:uint; nthRev:bool)
    ret.add [offset & m.get.captures[0][0..^r.len+1], r]
    isSUCCEED
 
-macro getE_MultiN( ret :var OffNodArray; off, nod, tag, posn, att :string) :bool=
+macro getE_MultiN( ret :OffNodArray; off, nod, tag, posn, att :string) :bool=
  result = quote do:
   `nod`.headeRemain `off`
   var
    a,b,i :uint
    tag = `tag`
-  if `posn` != "": `posn`.posiN
+  if `posn` != "": `posn`.posiN(a,b)
   elif `att` != "": tag &= r"\s+" & `att`
   while true:
    if getOffUp2Tag( `tag`):
@@ -228,7 +230,7 @@ macro getE_MultiN( ret :var OffNodArray; off, nod, tag, posn, att :string) :bool
    else: break
   `ret`.len==0
 
-template getE_MultiN( ret :var OffNodArray; off, nod, aatt :string) :bool=
+template getE_MultiN( ret :OffNodArray; off, nod, aatt :string) :bool=
  nod.headeRemain off
  while true:
   if getOffUp2Tag( r"\S+\s+" & aatt):
@@ -237,7 +239,7 @@ template getE_MultiN( ret :var OffNodArray; off, nod, aatt :string) :bool=
   else: break
  ret.len==0
 
-template getE_MultiN( ret :var OffNodArray; off, nod :string) :bool=
+template getE_MultiN( ret :OffNodArray; off, nod :string) :bool=
  nod.headeRemain off
  while true:
   if getOffUp2Tag:
@@ -246,7 +248,7 @@ template getE_MultiN( ret :var OffNodArray; off, nod :string) :bool=
   else: break
  ret.len==0
 
-template getAllDepthNth( ret :var OffNodArray; off, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
+template getAllDepthNth( ret :OffNodArray; off, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
  var
   notTag = "(?!" & tag & r"\b)"
   ttag = "(?=" & tag & r"\b)"
@@ -254,8 +256,8 @@ template getAllDepthNth( ret :var OffNodArray; off, nod, tag :string; minD, nth 
  template ePssblNodeLoop( nthRevCondition)=
   while curNode.len>0:
    nd.reset
-   for o_n in curNode:
-    o_n[1].headeRemain o_n[0]
+   for t in curNode:
+    t[Node].headeRemain t[Offset]
     nthRevCondition
    curNode= nd
  template loopB(n:uint)=
@@ -276,19 +278,19 @@ template loop( foundCmd)=
  aDInit
  while curNode.len>0:
   nd.reset
-  for o_n in curNode:
-   var i {.inject.} :uint
-   o_n[1].headeRemain o_n[0]
+  for t in curNode:
+   var i {.inject.}:uint
+   t[Node].headeRemain t[Offset]
    while true:
     ctnoTagUp2Tag nd, notTag, theTag:
      foundCmd
   curNode=nd
-template getAllDepthMultiN( ret :var OffNodArray; o, n :string; minD:uint; tag:string; posn, att="") :bool=
+template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD:uint; tag:string; posn, att="") :bool {.dirty.}=
  var
   a,b:uint
-  notTag {.inject.} = "(?!" & tag & r"\b"
-  theTag {.inject.} = "(?=" & tag & r"\b"
- if posn != "": posn.posiN
+  notTag= "(?!" & tag & r"\b"
+  theTag= "(?=" & tag & r"\b"
+ if posn != "": posn.posiN(a,b)
  elif att != "":
   notTag &= r"\s+" & att; theTag &= r"\s+" & att
  notTag &= ")"; theTag &= ")"
@@ -297,15 +299,15 @@ template getAllDepthMultiN( ret :var OffNodArray; o, n :string; minD:uint; tag:s
   if i>a and (b==0 or i<=b) and maxND >= minD:
    ret.add [offset, res]
  ret.len==0
-template getAllDepthMultiN( ret :var OffNodArray; o, n :string; minD :uint; aatt :string) :bool=
+template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD :uint; aatt :string) :bool {.dirty.}=
  var
-  notTag {.inject.}= r"(?!\S+\s+" & aatt & ")"
-  theTag {.inject.}= r"(?=\S+\s+" & aatt & ")"
+  notTag = r"(?!\S+\s+" & aatt & ")"
+  theTag = r"(?=\S+\s+" & aatt & ")"
  loop:
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
-template getAllDepthMultiN( ret :var OffNodArray; o, n :string; minD :uint) :bool=
- var notTag{.inject.},theTag{.inject.}=""
+template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD :uint) :bool {.dirty.}=
+ var notTag,theTag=""
  loop:
   if maxND >= minD: ret.add [offset, res]
  ret.len==0
@@ -428,11 +430,9 @@ template getDocFile( f, w :string)=
     echo "\nCannot read '",f,"': ",e.msg
     continue
    except OverflowDefect as e:
-    echo e.msg
-    continue
+    echo e.msg;continue
    except:
-    echo "\nFile '",outf,"': critical error"
-    continue
+    echo "\nFile '",outf,"': critical error";continue
    finally:break
   else:
    echo "'",f,"' doesn't exist"
@@ -541,8 +541,8 @@ var
  fpath, iniNode :OffNodArray
  opt :char
  founds, foundd :string
-block:                      # scope to get around equivalent C++ delete command with a hope
- srcFile.each_path_search   # once exiting it, any allocation inside gets freed by Nim GC
+block:                          # scope to get around equivalent C++ delete command with hope
+ srcFile.each_path_search       # once exiting it, any allocation inside gets freed by Nim GC
 if cmdLine.len==0:
  opt= if srdPaths.len>1:'c'
  else:
