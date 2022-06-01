@@ -9,24 +9,24 @@ template  strUint( s :string) :uint=
 template numChr( c :char, s: string) :uint=
  var res :uint
  for i in s:
-  if i==c: res.inc
+  if i==c: inc(res)
  res
-    # ML regexes       text node & comment/asymetric tag as content of text node:
+    # ML regexes           text node & comment/asymetric tag as content of text node:
 let
  txNodeR= r"(?:[^<>]++(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)+"
- ctntR= r"(?:[^<>]*+(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)*+" # as of element node
+ ctntR= r"(?:[^<>]*+(?><!--[^->]*-->|<(?>meta|link|input|img|hr|base)\b[^>]*+>)*)*+" #-> as of element node
  ctnt= re("(?s)^(" & ctntR & ")(.+)")
  nodeR= r"(<([a-z]\w*+)(?>[^/>]*+/>|[^>]*+>(?:" & ctntR & r"(?-2)*+)*+</\g-1>))"
  headR= r"(<(?>[a-z]\w*+|!DOCTYPE)[^>]*+>)"
  head= re("(?s)^" & headR & "(.+)")
 var
- whole, offset, res, remain, remainB :string
+ whole, offset, res, remain, tag :string
  totN, maxND :uint
 
 template nodeB( tot, max, d :uint)=
  if m.isNone: return false
- let g=m.get.captures.toSeq
- tot.inc; d.inc; if d>max: max=d
+ let g= m.get.captures.toSeq
+ inc(tot); inc(d); if d>max: max=d
  var
    tagname= g[0].get
    off = "<" & tagname
@@ -45,7 +45,7 @@ template nodeB( tot, max, d :uint)=
    str= m.get.captures[1]
    if str[0..1] == "</" :
      tagname &= ">"
-     if str[ 2..<2+tagname.len] == tagname:
+     if str[ 2..1+tagname.len] == tagname:
        res= off & "</" & tagname
        dec(d)
        if d==0:
@@ -59,7 +59,7 @@ template nodeB( tot, max, d :uint)=
    else: break
  return false
 
-# 2 node functions to find direct closed tag or nested node content, it'd count the max depth, nodes etc
+# 2 node functions to find direct closed tag or the nested ones, it'd count the max depth, nodes etc
 # they're just header; with and without lookahead tag fed to the recursive node function inside
 proc node( str= remain) :bool=
  var tot, max, d :uint
@@ -70,7 +70,7 @@ proc node( str= remain) :bool=
 
 proc node( str, tag :string) :bool=
  var tot, max, d :uint
- proc nodeRec( str :string; tag="") :bool=
+ proc nodeRec( str :string, tag="") :bool=
   let m= str.find re("(?xs) ^<(" & tag & r"[a-z]\w*+) (?> ([^/>]*+/>) | ([^>]*+>) ) (.+)" )
   nodeB tot, max, d
  nodeRec str, tag
@@ -86,9 +86,7 @@ template getOffUp2Tag( tag="") :bool=
   true
 
 type
- Pair = enum
-  Offset, Node
- StrPair = array[ Pair,string]
+ StrPair = tuple[ Offset :string, Node :string]
  OffNodArray = seq[ StrPair]
 
 template ctnPrevTag( nd :OffNodArray; isTheTagNode) =
@@ -97,20 +95,23 @@ template ctnPrevTag( nd :OffNodArray; isTheTagNode) =
   offset &= m.get.captures[0]
   remain = m.get.captures[1]
   if isTheTagNode:
-   if maxND > minD: nd.add [offset, res]
+   if maxND > minD: nd.add (offset, res)
    offset &= res
   else: break
 
-template ctnoTagUp2Tag( nd :OffNodArray; notTag, tag :string; xSpeCmd) =
+template ctnoTagUp2Tag( nd :OffNodArray, xSpeCmd) =
+ tag &= r"\b)"
  ctnPrevTag nd:
-  node remain, notTag
- if node( remain, tag):
-  if maxND > minD: nd.add [offset, res]
+  node remain, "(?!" & tag
+ tag = "(?=" & tag
+ if node(remain, tag):
+  if maxND > minD:
+   nd.add (offset, res)
   xSpeCmd
   offset &= res
  else: break
 
-template headeRemain( nd :string, prevOff="")=
+template headeRemain( nd :string, prevOff="") =
  var m = nd.find head
  offset= prevOff & m.get.captures[0]
  remain= m.get.captures[1]
@@ -119,7 +120,7 @@ const
  isERROR  = true
  isSUCCEED= false
 
-template posiN( posn :string, a, b :uint)=
+template posiN( posn :string, a,b :uint)=
  var
   g = posn.find(re"(?>(<)|>)(=)?(\d+)").get.captures.toSeq
   eq= g[1].isSome
@@ -128,39 +129,48 @@ template posiN( posn :string, a, b :uint)=
        b= if eq: n else: n-1
  else: a= if eq: n-1 else: n
 
-proc getxNRev( n :var string) :bool=
- var
-  i :uint
-  uin= n.strUint
+proc getNthRev( n :var uint) :bool=
+ var i :uint
+ while true:
+  inc(i)
+  let m= remain.find re(
+   "^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $i & "})" )
+  if m.isNone: break
+ if i<=n: return false
+ n = i-n         # i is the max nth from which subtract the specified nth
+ true
+
+proc getxNRev( n :var uint) :bool=
+ var i :uint
  while true:
   inc(i)
   let m= remain.find re( r"^(?:" & nodeR & "*" & txNodeR & "){" & $i & "}" )
   if m.isNone: break
- if i<=uin: return false
- n= $(i-uin)         # i is the max nth from which subtract the specified nth
+ if i<=n: return false
+ n= i-n
  true
 
-proc getNthRev( tag = ""; ntha :var uint) :bool=
- var i :uint
- while true:
-  i.inc
-  let m= remain.find re(
-   "^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $i & "})" )
-  if m.isNone: break
- if i<=ntha: return false
- ntha = i-ntha
- true
-
-template getTextNth( ret :OffNodArray; off, nod, txNth :string; txNRev:bool) :bool=
+template getTx_Nth( ret :OffNodArray; off, nod :string; n :uint; txNRev:bool) :bool=
  nod.headeRemain off
- var n=txNth
  if txNRev and not getxNRev( n): isERROR
  else:
-  let m= remain.find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & n & "})" )
+  let m= remain.find re( r"^((?:" & nodeR & "*(" & txNodeR & ")){" & $n & "})" )
   if m.isNone: isERROR
   else:
    var r= m.get.captures[3]
-   ret.add [offset & m.get.captures[0][0..^r.len+1], r]
+   ret.add (offset & m.get.captures[0][0..^r.len+1], r)
+   isSUCCEED
+
+template getE_Nth( ret :OffNodArray; off, nod :string; n:uint; nthRev:bool) :bool=
+ nod.headeRemain off
+ if nthRev and not getNthRev( n): isERROR
+ else:
+  let m= remain.find re(
+    r"^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $n & "})")
+  if m.isNone: isERROR
+  else:
+   var r= m.get.captures[3]
+   ret.add (offset & m.get.captures[0][0..^r.len+1], r)
    isSUCCEED
 
 macro getTextMulN( ret :OffNodArray; off, nod, posn :string) :bool=
@@ -174,56 +184,19 @@ macro getTextMulN( ret :OffNodArray; off, nod, posn :string) :bool=
    if m.isNone: break
    if i>a and (b==0 or i<=b):
     var r= m.get.captures[3]
-    `ret`.add [offset & m.get.captures[0][0..^r.len+1], r]
+    `ret`.add (offset & m.get.captures[0][0..^r.len+1], r)
   `ret`.len==0
 
-template aDInit {.dirty.}=
- var curNode, nd= newSeqOfCap[ StrPair]( avgOffNode_Ply)
- for _ in 0..avgOffNode_Ply:
-  nd.add [newStringOfCap(maxw), newStringOfCap(maxw)]
-  curNode.add [newStringOfCap(maxw), newStringOfCap(maxw)]
- curNode.reset
- curNode.add [this[Offset], this[Node]]
-
-template getAllDepthTxNth( ret :OffNodArray; off, nod, nth :string; txNRev:bool) :bool=
- aDInit
- while curNode.len>0:
-  nd.reset
-  for the in curNode:
-   if getTextNth( ret, the[Offset], the[Node], nth, txNRev): ret.add [offset, res]
-   the[Node].headeRemain the[Offset]
-   while true:
-    if getOffUp2Tag: nd.add [offset, res]
-    else: break
-  curNode= nd
-
- ret.len==0
- 
-template getE_Nth( ret :OffNodArray; off, nod, tag :string; n:uint; nthRev:bool) :bool=
- nod.headeRemain off
- if nthRev and not getNthRev( tag, n): isERROR
- else:
-  let m= remain.find re(
-    r"^((?:(?:" & ctntR & "(?:(?!<" & tag & r"\b)" & nodeR & ")?)*+(?=<" & tag & r"\b)" & nodeR & "){" & $n & "})")
-  if m.isNone: isERROR
-  else:
-   var r= m.get.captures[3]
-   ret.add [offset & m.get.captures[0][0..^r.len+1], r]
-   isSUCCEED
-
-macro getE_MultiN( ret :OffNodArray; off, nod, tag, posn, att :string) :bool=
+macro getE_MultiN( ret :OffNodArray; off, nod, posn, att :string) :bool=
  result = quote do:
   `nod`.headeRemain `off`
-  var
-   a,b,i :uint
-   tag = `tag`
-  if `posn` != "": `posn`.posiN(a,b)
+  var a,b,i :uint
+  if `posn` != "":  `posn`.posiN(a,b)
   elif `att` != "": tag &= r"\s+" & `att`
   while true:
-   if getOffUp2Tag( `tag`):
-    i.inc
-    if i>a and (b==0 or i<=b):
-     `ret`.add [offset, res]
+   if getOffUp2Tag( tag):
+    inc(i)
+    if i>a and (b==0 or i<=b): `ret`.add (offset, res)
     offset &= res
    else: break
   `ret`.len==0
@@ -232,7 +205,7 @@ template getE_MultiN( ret :OffNodArray; off, nod, aatt :string) :bool=
  nod.headeRemain off
  while true:
   if getOffUp2Tag( r"\S+\s+" & aatt):
-   ret.add [offset, res]
+   ret.add (offset, res)
    offset &= res
   else: break
  ret.len==0
@@ -241,84 +214,149 @@ template getE_MultiN( ret :OffNodArray; off, nod :string) :bool=
  nod.headeRemain off
  while true:
   if getOffUp2Tag:
-    ret.add [offset, res]
+    ret.add (offset, res)
     offset &= res
   else: break
  ret.len==0
 
-template getAllDepthNth( ret :OffNodArray; off, nod, tag :string; minD, nth :uint; nthRev:bool) :bool=
- var
-  notTag = "(?!" & tag & r"\b)"
-  ttag = "(?=" & tag & r"\b)"
- aDInit
- template ePssblNodeLoop( nthRevCondition)=
-  while curNode.len>0:
-   nd.reset
-   for t in curNode:
-    t[Node].headeRemain t[Offset]
-    nthRevCondition
-   curNode= nd
- template loopB(n:uint)=
-  var i:uint
-  while true:
-   inc(i)
-   ctnoTagUp2Tag nd, notTag, ttag:
-    if i==n and maxND >= minD: ret.add [offset, res]
- if nthRev:
-  ePssblNodeLoop:
-   var n=nth
-   if getNthRev( tag, n): n.loopB
- else:
-  ePssblNodeLoop: nth.loopB
- ret.len==0
+template allDepthInit {.dirty.}=
+ var curNode, nd= newSeqOfCap[ StrPair]( avgOffNode_Ply)
+ for _ in 0..avgOffNode_Ply:
+  nd.add (newStringOfCap(maxw), newStringOfCap(maxw))
+  curNode.add (newStringOfCap(maxw), newStringOfCap(maxw))
+ curNode.reset
 
-template loop( foundCmd)=
- aDInit
+template getAllDepthNth_Tx( ret :OffNodArray; off, nod :string; nth :uint; txNRev:bool) :bool=
+ curNode.add (off, nod)
  while curNode.len>0:
   nd.reset
-  for t in curNode:
-   var i {.inject.}:uint
-   t[Node].headeRemain t[Offset]
+  for the in curNode:
+   if getTx_Nth( ret, the.Offset, the.Node, nth, txNRev): ret.add (offset, res)
    while true:
-    ctnoTagUp2Tag nd, notTag, theTag:
-     foundCmd
-  curNode=nd
-template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD:uint; tag:string; posn, att="") :bool {.dirty.}=
- var
-  a,b:uint
-  notTag= "(?!" & tag & r"\b"
-  theTag= "(?=" & tag & r"\b"
+    if getOffUp2Tag: nd.add (offset, res)
+    else: break
+  curNode= nd
+ ret.len==0
+ 
+template getAllDepthMultiN_Tx( ret :OffNodArray; off, nod, posn :string) :bool=
+ var i,a,b:uint
  if posn != "": posn.posiN(a,b)
- elif att != "":
-  notTag &= r"\s+" & att; theTag &= r"\s+" & att
- notTag &= ")"; theTag &= ")"
- loop:
-  i.inc
-  if i>a and (b==0 or i<=b) and maxND >= minD:
-   ret.add [offset, res]
+ curNode.add (off, nod)
+ while curNode.len>0:
+  nd.reset
+  for the in curNode:
+   while true:
+    if getOffUp2Tag:
+     nd.add (offset, res)
+     i.inc
+     if i>a and (b==0 or i<=b):
+      ret.add (offset, res)
+    else:
+     break
+  curNode= nd
  ret.len==0
-template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD :uint; aatt :string) :bool {.dirty.}=
- var
-  notTag = r"(?!\S+\s+" & aatt & ")"
-  theTag = r"(?=\S+\s+" & aatt & ")"
- loop:
-  if maxND >= minD: ret.add [offset, res]
+
+template getAllDepthNth( ret :OffNodArray; off, nod :string; minD, nth :uint; nthRev, nextIsTx:bool) :bool=
+ curNode.add (off, nod)
+ template everyPsblNode( nthORnthRevCo) =
+  while curNode.len>0:
+   nd.reset
+   for the in curNode:
+    the.Node.headeRemain the.Offset
+    nthORnthRevCo
+   curNode= nd
+ var i :uint
+ template loopn( n:uint)=
+  while true:
+   inc(i)
+   ctnoTagUp2Tag nd:
+    if i==n and maxND >= minD: ret.add (offset, res)
+ template txLoop( n:uint)=
+  if getOffUp2Tag( tag):
+   nd.add (offset, res)
+   inc(i)
+   if i==n:
+    ret.add (offset, res)
+   offset &= res
+  else: break
+ if nextIsTx:
+  if nthRev:
+   everyPsblNode:
+    var n=nth; if getNthRev( n): n.txLoop
+  else:
+   everyPsblNode:
+    nth.txLoop
+ else:
+  if nthRev:
+   everyPsblNode:
+    var n=nth; if getNthRev( n): n.loopn
+  else:
+   everyPsblNode:
+    nth.loopn
  ret.len==0
-template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD :uint) :bool {.dirty.}=
- var notTag,theTag=""
- loop:
-  if maxND >= minD: ret.add [offset, res]
+
+template loop( commandIFoundOrBreak, i_var) =
+ curNode.add (this.Offset, this.Node)
+ while curNode.len>0:
+  nd.reset
+  for the in curNode:
+   the.Node.headeRemain the.Offset
+   while true:
+    commandIFoundOrBreak
+   i_var
+  curNode=nd
+
+# off, nod are arguments of func. of offsetNodeLoop arg. template normalization is: this.Offset, this.Node
+
+template getAllDepthMultiN( ret :OffNodArray; off, nod :string; minD:uint; posn, att :string; nextIsTx :bool) :bool {.dirty.}=
+ var a, b, i :uint
+ if posn != "":  posn.posiN(a,b)
+ elif att != "": tag &= r"\s+" & att
+ if nextIsTx:
+  loop do:
+   if getOffUp2Tag( tag):
+    nd.add (offset, res)
+    inc(i)
+    if i>a and (b==0 or i<=b):
+     ret.add (offset, res)
+    offset &= res
+   else: break
+  do: i=0
+ else:
+  loop do:
+   ctnoTagUp2Tag nd:
+    inc(i)
+    if i>a and (b==0 or i<=b) and maxND >= minD:
+     ret.add (offset, res)
+  do: i=0
+ ret.len==0
+ 
+template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD :uint; aatt :string; nextIsTx :bool) :bool {.dirty.}=
+ tag = r"\S+\s+" & aatt
+ loop do:
+  ctnoTagUp2Tag nd:
+   if maxND >= minD: ret.add (offset, res)
+ do:discard
+ ret.len==0
+
+template getAllDepthMultiN( ret :OffNodArray; o, n :string; minD :uint; nextIsTx :bool) :bool {.dirty.}=
+ tag = ""
+ loop do:
+  ctnoTagUp2Tag nd:
+   if maxND >= minD: ret.add (offset, res)
+ do:discard
  ret.len==0
 
 template offsetNodeLoop( xPathPat) =
  for i, this {.inject.} in offsetNode:
   retOffNode.reset
   if xPathPat:
-   if i<offsetNode.high: continue     # if it's not the last in loop, go on iterating, otherwise
-   return resultArr.len==0              # return true (1) if finding none or false if finding any
-  if remPath.len>0:
-   let e= getE_Path_R( remPath, retOffNode)   #...is propagating to the next depth and returning boolean
-   if i==offsetNode.high: return e            # value which'll be returned if this's the last iteration 
+   if i<offsetNode.high: continue         # if it's not the last in loop, go on iterating, otherwise
+   return resultArr.len==0                # return true (1) if finding none or false if finding any
+  if not isTxNode and
+   remPath.len>0:
+    let e= getE_Path_R( remPath, retOffNode)    #...is propagating to the next depth and returning boolean
+    if i==offsetNode.high: return e             # value which'll be returned if this's the last iteration 
   else:
    resultArr.add retOffNode
 
@@ -328,14 +366,14 @@ var
 
 proc getE_Path_R( path :string; offsetNode :OffNodArray) :bool=
  var
-  g= path.find(re"(?x)^/ (/)? (?> (text\(\)) (?: \[ (?> (last\(\)-)? ([1-9]\d*+) | position\(\) (?!<1) ([<>]=? [1-9]\d*+) ) \] )? | ([^/@*[]+) (?: \[ (?> (?>(last\(\)-)|position\(\)=)? ([1-9]\d*+) | position\(\) (?!<1) ( [<>]=? [1-9]\d*+ ) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)" ).get.captures.toSeq
-  nth :uint
-  txNth, txPos, tag, posn, attg, aatt :string
+  g= path.find(re"(?x)^/ (/)? (?> (text\(\)) (?: \[ (?> (last\(\)-)? ([1-9]\d*+) | position\(\) (?!<1) ([<>]=? [1-9]\d*+)) \])? | (?> ([^/@*[]+) (?: \[ (?> (?>(last\(\)-)|position\(\)=)? ([1-9]\d*+) | position\(\) (?!<1) ( [<>]=? [1-9]\d*+ ) | @(\*| [^]]+) ) \] )? | @([a-z]\w*[^/]* |\*) | (\*) ) (.*)  )" ).get.captures.toSeq
+  nth, txNth :uint
+  txPos, posn, attg, aatt :string
   remPath= g[12].get
-  minD= 1+numChr( '/', remPath)
+  minD= 1 + numChr( '/', remPath)
   retOffNode= newSeqOfCap[ StrPair]( avgOffNode_Ply)       # the offset-node pair found which...
  for _ in 0..avgOffNode_Ply:
-  retOffNode.add [newStringOfCap(maxw),newStringOfCap(maxw)]
+  retOffNode.add (newStringOfCap(maxw),newStringOfCap(maxw))
  template isAllDepths:bool= g[0].isSome
  template isTxNode   :bool= g[1].isSome
  template txNRev     :bool= g[2].isSome
@@ -347,11 +385,10 @@ proc getE_Path_R( path :string; offsetNode :OffNodArray) :bool=
  template isPosn :bool= g[8].isSome
  template isAttg :bool= g[9].isSome
  template isAatt :bool= g[10].isSome
+ template nextPly_Tx :bool= remPath.find(re"^//?text\(\)").isSome
  if isTxNode:
-  if isTxNth:
-   txNth= g[3].get
-  elif isTxPos:
-   txPos= g[4].get
+  if isTxNth: txNth= g[3].get.strUint
+  elif isTxPos: txPos= g[4].get
  elif isTag:
   tag= g[5].get
   if isNth:
@@ -363,33 +400,36 @@ proc getE_Path_R( path :string; offsetNode :OffNodArray) :bool=
  elif isAatt:
   aatt= g[10].get
  if isAllDepths:              # all depths under current //
+  allDepthInit
   if isTag:
    if isNth:
-    offsetNodeLoop: getAllDepthNth retOffNode, this[Offset], this[Node], tag, minD, nth, nthRev
+    offsetNodeLoop: getAllDepthNth retOffNode, this.Offset, this.Node, minD, nth, nthRev, nextPly_Tx
    else:
-    offsetNodeLoop: getAllDepthMultiN retOffNode, this[Offset], this[Node], minD, tag, posn, attg
+    offsetNodeLoop: getAllDepthMultiN retOffNode, this.Offset, this.Node, minD, posn, attg, nextPly_Tx
   elif isAatt:
-   offsetNodeLoop: getAllDepthMultiN retOffNode, this[Offset], this[Node], minD, aatt=aatt
+   offsetNodeLoop: getAllDepthMultiN retOffNode, this.Offset, this.Node, minD, aatt=aatt, nextPly_Tx
   elif isTxNode:
    if isTxNth:
-    offsetNodeLoop: getAllDepthTxNth retOffNode, this[Offset], this[Node], txNth, txNRev
+    offsetNodeLoop: getAllDepthNth_Tx retOffNode, this.Offset, this.Node, txNth, txNRev
+   else:
+    offsetNodeLoop: getAllDepthMultiN_Tx retOffNode, this.Offset, this.Node, txPos
   else:
-   offsetNodeLoop: getAllDepthMultiN retOffNode, this[Offset], this[Node], minD
+   offsetNodeLoop: getAllDepthMultiN retOffNode, this.Offset, this.Node, minD, nextPly_Tx
  elif isTag:
   if isNth:
-   offsetNodeLoop: getE_Nth retOffNode, this[Offset], this[Node], tag, nth, nthRev
+   offsetNodeLoop: getE_Nth retOffNode, this.Offset, this.Node, nth, nthRev
   else:
-   offsetNodeLoop: getE_MultiN retOffNode, this[Offset], this[Node], tag, posn, attg
+   offsetNodeLoop: getE_MultiN retOffNode, this.Offset, this.Node, posn, attg
  elif isAatt:
-  offsetNodeLoop: getE_MultiN retOffNode, this[Offset], this[Node], aatt
+  offsetNodeLoop: getE_MultiN retOffNode, this.Offset, this.Node, aatt
  elif isTxNode:
   if isTxNth:
-   offsetNodeLoop: getTextNth retOffNode, this[Offset], this[Node], txNth, txNRev
+   offsetNodeLoop: getTx_Nth retOffNode, this.Offset, this.Node, txNth, txNRev
   else:
-   offsetNodeLoop: getTextMulN retOffNode, this[Offset], this[Node], txPos
+   offsetNodeLoop: getTextMulN retOffNode, this.Offset, this.Node, txPos
  else:
-  offsetNodeLoop: getE_MultiN retOffNode, this[Offset], this[Node]
-         # be any of these true, it failed finding, so see if
+  offsetNodeLoop: getE_MultiN retOffNode, this.Offset, this.Node
+ # be any of these true, it failed finding. Now see if
  isSUCCEED
 
 var
@@ -442,8 +482,7 @@ template getDocFile( f, w :string)=
    f=readLine(stdin).replace(re"^\h+|\s+$", "")
    if f.len>0: break
 
-template validatingML=
- validatingML( whole)
+template validatingML= validatingML whole
 template validatingML( w :string)=
  let m= w.find re(
   r"(?xs)^(\s* (?: <\?xml\b [^>]*+> \s* )?) (< (!DOCTYPE) [^>]*+> [^<]* (.+))" )
@@ -452,30 +491,31 @@ template validatingML( w :string)=
   not r.contains(re( r"\s*(?:" & nodeR & ")*")):
    echo "\nCan't parse it due to mark-up language's ill-form or unbalanced tag pair\nAborting"
    quit(0)
- iniNode= @[[m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">"]]
-
-template unsortRes( fnd)=
- foundd=""
- for i in pathResult:
-  foundd &= "\n" & i[0] & ":"
-  for j{.inject.} in i[1]:
-   foundd &= "\n--------\n" & j[Node];fnd
+ iniNode= @[(m.get.captures[0], m.get.captures[1] & "</" & m.get.captures[2] & ">")]
 
 template path_search_H=
  avgOffNode_Ply= (totN.float / maxND.float * 1.5 ).uint
  miss = newSeqOfCap[ string ](totPaths)
  let maxFouND = (totN.float * 3 / 4).uint
- fpath= newSeqOfCap[ array[ 2, string] ](maxFouND)
+ fpath= newSeqOfCap[ StrPair ](maxFouND)
  maxw= (whole.len-17).uint
  offset= newStringOfCap(maxw)
  res   = newStringOfCap(maxw)
  remain= newStringOfCap(maxw)
  for _ in 0..maxFouND:
-  resultArr.add [newStringOfCap(maxw), newStringOfCap(maxw)]
-  fpath.add [newStringOfCap(maxw), newStringOfCap(maxw)]
+  resultArr.add (newStringOfCap(maxw), newStringOfCap(maxw))
+  fpath.add (newStringOfCap(maxw), newStringOfCap(maxw))
  for _ in 0..totPaths:
   pathResult.add (newStringOfCap(71), fpath)
+
 template path_search_B( asTarget="")=
+ template unsortRes( fnd)=
+  foundd=""
+  for i in pathResult:
+   foundd &= "\n" & i[0] & ":"
+   for j{.inject.} in i[1]:
+    foundd &= "\n-----\n" & j.Node
+    fnd
  fpath.reset
  pathResult.reset
  var fail :bool
@@ -505,8 +545,9 @@ template path_search_B( asTarget="")=
   else: quit("\nNothing was done" & asTarget,0)
  else: stdout.write "Every given path was "
  if asTarget=="":
-      unsortRes: founds &= j[Node]
+      unsortRes: founds &= j.Node
  else:unsortRes: discard
+
 template each_path_search( file :string; asTarget="")=
  file.getDocFile
  echo "Checking document '",file,"'... "
@@ -517,10 +558,10 @@ template each_path_search( file :string; asTarget="")=
 
 ######   main   ######
 let
- xpath= re"(?x) ^(?> /?/? ( text\(\) (?: \[ (?> (?:last\(\)-)? [1-9]\d*+ | position\(\) (?!<1) [<>]=? [1-9]\d*+) \] )? | ([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d*+ | position\(\) (?!<1)[<>]=? [0-9]\d*+ | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))*+ $"
+ xpath= re"(?x) ^(?> /?/? ( ([a-z]\w*+) (?:\[ (?> (?:last\(\)-)? [0-9]\d*+ | position\(\) (?!<1)[<>]=? [0-9]\d*+ | @((?>(?2)(?:=(?2))? | \*)) ) \])? | @(?-1) | \*) | \.\.?) (?://?(?1))* (?: //?text\(\) (?: \[ (?> (?:last\(\)-)? [1-9]\d*+ | position\(\) (?!<1) [<>]=? [1-9]\d*+) \])? )? $"
 var
  cmdLine= commandLineParams()
- (pathStr, srcFile)= if cmdLine.len>0:    # This block expectedly error and need a knowledgable one's
+ (pathStr, srcFile)= if cmdLine.len>0:    # This block expectedly errs and need a knowledgable one's
   echo "\nTry to accomplish:"             # colloboration to correct it
   for i,l in cmdLine:
    echo i,". ",l
@@ -563,30 +604,30 @@ of 'c','C':
  else:
   path_search_B: " to copying"
   echo "found as copy target in the same document '",srcFile,"'\nEvery element of it:\n",foundd
- fpath.sort( proc( a,b :StrPair) :int=cmp( b[Offset].len, a[Offset].len) )
+ fpath.sort( proc( a,b :StrPair) :int=cmp( b.Offset.len, a.Offset.len) )
  echo "Should source element be under target element, replacing it, preceding it, or following it?\n(u: Under it. r: Replacing it. p: Preceding it. else key: Following it)"
  case getch()
  of 'u','U':
   for on in fpath:
    whole= whole.replace(re(
-    r"^\Q" & on[Offset] & r"\E" & headR), "$0" & founds)
+    r"^\Q" & on.Offset & r"\E" & headR), "$0" & founds)
  of 'r','R':
   for on in fpath:
    whole= whole.replace(re(
-    r"^(\Q" & on[Offset] & r"\E)" & nodeR), "$1" & founds)
+    r"^(\Q" & on.Offset & r"\E)" & nodeR), "$1" & founds)
  of 'p','P':
   for on in fpath:
    whole= whole.replace(re(
-    r"^\Q" & on[Offset] & r"\E"), "$0" & founds)
+    r"^\Q" & on.Offset & r"\E"), "$0" & founds)
  else:
   for on in fpath:
    whole= whole.replace(re(
-    r"^\Q" & on[Offset] & on[Node] & r"\E"), "$0" & founds)
+    r"^\Q" & on.Offset & on.Node & r"\E"), "$0" & founds)
  echo "\nCopying result:\n",whole
 of 'r','R':
- fpath.sort( proc( a,b :StrPair) :int=cmp( b[Offset].len, a[Offset].len) )
+ fpath.sort( proc( a,b :StrPair) :int=cmp( b.Offset.len, a.Offset.len) )
  for on in fpath:
-  whole= whole.replace(re(r"(?s)^(\Q" & on[Offset] & r"\E)\Q" & on[Node] & r"\E(.*)"), "$1$2")
+  whole= whole.replace(re(r"(?s)^(\Q" & on.Offset & r"\E)\Q" & on.Node & r"\E(.*)"), "$1$2")
  echo "\nRemoval result:\n",whole
 else: whole=founds
 echo "Save to a file? (y: Yes, save. else key: Quit)"
